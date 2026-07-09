@@ -1,5 +1,5 @@
 import { createLogger } from "~lib/logger"
-import type { VideoPayload } from "~lib/types"
+import type { CapturePayload } from "~lib/types"
 import { HttpService, getStoredToken } from "~services/http"
 
 // ── Logger ────────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export class MemoryService {
    * Callers should catch MemoryError and check `isUnauthenticated` to decide
    * whether to queue locally or surface an error to the user.
    */
-  async capture(payload: VideoPayload): Promise<void> {
+  async capture(payload: CapturePayload): Promise<void> {
     const token = await getStoredToken()
 
     if (!token) {
@@ -53,7 +53,7 @@ export class MemoryService {
       throw new MemoryError("Not authenticated", 401)
     }
 
-    logger.info({ videoId: payload.videoId, title: payload.title }, "capturing memory")
+    logger.info({ videoId: payload.videoId }, "capturing memory")
 
     const result = await this.http.post<{ ok: boolean }>("/api/memories", payload)
 

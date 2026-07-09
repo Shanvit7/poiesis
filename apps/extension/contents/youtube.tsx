@@ -7,18 +7,20 @@ export const config: PlasmoCSConfig = {
   matches: ["https://www.youtube.com/watch*"],
 }
 
-// --- Heuristics thresholds ---
-// These decide whether a video is worth capturing at all.
-// Tune these as we learn more about what users actually watch.
-const THRESHOLDS = {
-  minDurationSeconds: 180, // ignore anything under 3 min (music, clips)
-  minWatchPercent: 0.5, // user must have watched at least 50%
-  minPlayedSeconds: 90, // at least 90s of real playback (not seeking)
+// ── Capture trigger ───────────────────────────────────────────────────────────
+// NOT a quality gate. Just the minimum engagement needed to fire the event.
+// Whether the video is worth saving is decided in background.ts:
+//   primary  → Gemini Nano (AI gate)
+//   fallback → multi-signal heuristic scorer
+// Keep these thresholds low so the AI receives real engagement data.
+
+const CAPTURE_TRIGGER = {
+  minPlayedSeconds: 60, // 60s of genuine playback
+  minWatchPercent: 0.08, // 8% completion — catches short and long videos alike
 } as const
 
-// --- Metadata extraction ---
-// YouTube's DOM is unstable — selectors change between page versions.
-// We try multiple selectors and fall back gracefully.
+// ── Metadata extraction ───────────────────────────────────────────────────────
+// YouTube's DOM is unstable. Try multiple selectors and fall back gracefully.
 
 const getVideoId = (): string | null => new URLSearchParams(window.location.search).get("v")
 
@@ -36,20 +38,15 @@ const getChannel = (): string =>
     ""
   ).trim()
 
-// --- Heuristics check ---
-
-const shouldCapture = (
-  durationSeconds: number,
-  watchPercent: number,
-  playedSeconds: number
-): boolean => {
-  if (durationSeconds < THRESHOLDS.minDurationSeconds) return false
-  if (watchPercent < THRESHOLDS.minWatchPercent) return false
-  if (playedSeconds < THRESHOLDS.minPlayedSeconds) return false
-  return true
+const getDescription = (): string => {
+  const el =
+    document.querySelector<HTMLElement>("#description-inline-expander") ??
+    document.querySelector<HTMLElement>("ytd-expander #content") ??
+    document.querySelector<HTMLElement>("#description")
+  return (el?.textContent ?? "").trim().slice(0, 1000)
 }
 
-// --- Video tracker ---
+// ── Video tracker ─────────────────────────────────────────────────────────────
 // Attaches to a <video> element and monitors actual playback.
 // Returns a cleanup function to detach listeners.
 
@@ -76,17 +73,19 @@ const attachTracker = (
 
     const watchPercent = video.duration > 0 ? now / video.duration : 0
 
-    if (shouldCapture(video.duration, watchPercent, playedSeconds)) {
+    if (
+      playedSeconds >= CAPTURE_TRIGGER.minPlayedSeconds &&
+      watchPercent >= CAPTURE_TRIGGER.minWatchPercent
+    ) {
       reported = true
       onCapture({
         videoId: getVideoId(),
-        url: window.location.href,
         title: getTitle(),
         channel: getChannel(),
+        description: getDescription(),
         durationSeconds: Math.round(video.duration),
         playedSeconds: Math.round(playedSeconds),
         watchPercent: Math.round(watchPercent * 100) / 100,
-        capturedAt: new Date().toISOString(),
       })
     }
   }
@@ -95,7 +94,7 @@ const attachTracker = (
   return () => video.removeEventListener("timeupdate", onTimeUpdate)
 }
 
-// --- Wait for video element ---
+// ── Wait for video element ────────────────────────────────────────────────────
 // On SPA navigation the <video> element may not be in the DOM immediately.
 // We use a MutationObserver to wait for it rather than polling with setTimeout.
 
@@ -120,7 +119,7 @@ const waitForVideo = (onReady: (video: HTMLVideoElement) => () => void): (() => 
   }
 }
 
-// --- Component ---
+// ── Component ─────────────────────────────────────────────────────────────────
 // Returns null — no UI. All the work happens in the effect.
 
 export default function YouTubeTracker() {
