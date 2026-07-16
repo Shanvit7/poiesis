@@ -2,34 +2,47 @@ import "~globals.css"
 
 import { useEffect, useState } from "react"
 
-import { probeSupermemory } from "~services/http"
+import { loadStats } from "~lib/stats"
 
 interface PopupState {
-  connected: boolean | null // null = loading
   lastSavedAt: string | null
   savedToday: number
 }
 
+// Logo wordmark — matches assets/logo.svg
+const Logo = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 120 40"
+    fill="none"
+    aria-label="Poiesis"
+    className="h-7 w-auto"
+  >
+    <title>Poiesis</title>
+    <text
+      x="0"
+      y="28"
+      fontFamily="'Geist', -apple-system, BlinkMacSystemFont, system-ui, sans-serif"
+      fontSize="22"
+      fontWeight="600"
+      letterSpacing="-0.4"
+      className="fill-primary"
+    >
+      Poiesis
+    </text>
+  </svg>
+)
+
 export default function Popup() {
   const [state, setState] = useState<PopupState>({
-    connected: null,
     lastSavedAt: null,
     savedToday: 0,
   })
 
   useEffect(() => {
-    // Probe server
-    void probeSupermemory().then((connected) => setState((prev) => ({ ...prev, connected })))
-
-    // Load capture stats
-    const todayKey = `savedToday_${new Date().toISOString().slice(0, 10)}`
-    chrome.storage.local.get({ lastSavedAt: null, [todayKey]: 0 }, (data) => {
-      setState((prev) => ({
-        ...prev,
-        lastSavedAt: data.lastSavedAt as string | null,
-        savedToday: (data[todayKey] as number) ?? 0,
-      }))
-    })
+    void loadStats().then(({ lastSavedAt = null, savedToday = 0 }) =>
+      setState((prev) => ({ ...prev, lastSavedAt, savedToday }))
+    )
   }, [])
 
   const openSidePanel = () => {
@@ -57,42 +70,23 @@ export default function Popup() {
   }
 
   return (
-    <div className="w-72 p-4 font-sans">
-      {/* Header */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xl">🧠</span>
-        <span className="font-semibold text-gray-900 text-base">SupaTube</span>
-      </div>
-
-      {/* Connection status */}
-      <div className="flex items-center gap-2 mb-4 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
-        {state.connected === null ? (
-          <span className="w-2 h-2 rounded-full bg-gray-300 animate-pulse" />
-        ) : state.connected ? (
-          <span className="w-2 h-2 rounded-full bg-green-500" />
-        ) : (
-          <span className="w-2 h-2 rounded-full bg-red-500" />
-        )}
-        <span className="text-xs text-gray-600">
-          {state.connected === null
-            ? "Checking…"
-            : state.connected
-              ? "Connected to local memory"
-              : "Not connected — start supermemory-server"}
-        </span>
+    <div className="w-72 p-5">
+      {/* Header with logo */}
+      <div className="mb-5">
+        <Logo />
       </div>
 
       {/* Open panel CTA */}
       <button
         type="button"
         onClick={openSidePanel}
-        className="w-full bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-2 rounded-lg transition-colors mb-3"
+        className="w-full bg-primary hover:bg-primary-hover text-white text-sm font-medium py-2 rounded-lg transition-colors mb-4"
       >
         Open Memory Panel
       </button>
 
       {/* Stats */}
-      <div className="flex justify-between text-xs text-gray-500 mb-4 px-1">
+      <div className="flex justify-between text-xs text-fg-3 mb-4 px-1">
         <span>Last saved: {formatLastSaved(state.lastSavedAt)}</span>
         <span>
           Today: {state.savedToday} video{state.savedToday !== 1 ? "s" : ""}
@@ -103,7 +97,7 @@ export default function Popup() {
       <button
         type="button"
         onClick={openSettings}
-        className="w-full text-xs text-gray-400 hover:text-gray-600 py-1 transition-colors"
+        className="w-full text-xs text-fg-3 hover:text-fg py-2 transition-colors"
       >
         Settings
       </button>

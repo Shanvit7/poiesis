@@ -1,24 +1,20 @@
-import Supermemory from "supermemory"
-
+import { SUPERMEMORY_BASE_URL } from "~lib/constants"
 import { createLogger } from "~lib/logger"
 
 const logger = createLogger("supermemory")
 
 // ── Client cache ──────────────────────────────────────────────────────────────
-// Cached per service-worker lifetime. Keyed by apiKey so that if the user
-// updates their key, the next call re-creates the client automatically.
-
-let cachedClient: Supermemory | null = null
+let cachedClient: unknown | null = null
 let cachedApiKey: string | null = null
 
 // ── SDK singleton ─────────────────────────────────────────────────────────────
-// Always reads from chrome.storage.local at call time — never at module level.
-// The SW may start before storage is populated.
+// Dynamic import — Supermemory SDK must NOT be loaded at module init in
+// extension renderer contexts (sidepanel/popup). Lazy-load on first call.
 
-export const getSupermemoryClient = async (): Promise<Supermemory> => {
-  const { apiKey = "", baseURL = "http://localhost:6767" } = await chrome.storage.local.get({
+export const getSupermemoryClient = async () => {
+  const { apiKey = "", baseURL = SUPERMEMORY_BASE_URL } = await chrome.storage.local.get({
     apiKey: "",
-    baseURL: "http://localhost:6767",
+    baseURL: SUPERMEMORY_BASE_URL,
   })
 
   if (cachedClient && cachedApiKey === apiKey) {
@@ -27,9 +23,12 @@ export const getSupermemoryClient = async (): Promise<Supermemory> => {
 
   logger.info({ baseURL }, "creating Supermemory client")
 
+  // ponytail: dynamic import avoids renderer crash from SDK module init
+  const { default: Supermemory } = await import("supermemory")
+
   cachedClient = new Supermemory({
     apiKey: apiKey as string,
-    baseURL: (baseURL as string) || "http://localhost:6767",
+    baseURL: (baseURL as string) || SUPERMEMORY_BASE_URL,
   })
   cachedApiKey = apiKey as string
 

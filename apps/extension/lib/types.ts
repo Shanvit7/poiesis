@@ -1,7 +1,3 @@
-// ── Re-export CapturePayload from schema (single source of truth) ─────────────
-// Do NOT define CapturePayload here — it lives in schemas/capture.schema.ts.
-export type { CapturePayload } from "~schemas/capture.schema"
-
 // ── Gate result (internal to background.ts — never stored directly in SDK) ────
 // score is ALWAYS 0–1:
 //   Memory Gate  → parsed.confidence ?? 0.5

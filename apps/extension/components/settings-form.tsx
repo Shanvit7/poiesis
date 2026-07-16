@@ -1,16 +1,35 @@
 import { useEffect, useState } from "react"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
-import {
-  SETTINGS_DEFAULTS,
-  type Settings,
-  saveSettings,
-  settingsSchema,
-} from "~schemas/settings.schema"
+import { Button } from "~components/ui/button"
+import { Input } from "~components/ui/input"
+import { AI_KEY_PLACEHOLDERS, AI_PROVIDER_LABELS, AI_PROVIDERS } from "~lib/constants"
+import { SETTINGS_DEFAULTS, type Settings, saveSettings, validateSettings } from "~lib/settings"
 import { probeSupermemory } from "~services/http"
+import { cn } from "~lib/utils"
 
 interface Props {
   onSaved?: () => void
 }
+
+const Field = ({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: React.ReactNode
+  hint?: React.ReactNode
+  error?: string
+  children: React.ReactNode
+}) => (
+  <div className="space-y-1">
+    <label className="text-xs font-medium text-fg-2">{label}</label>
+    {children}
+    {error && <p className="text-[11px] text-primary">{error}</p>}
+    {hint && <p className="text-[11px] text-fg-3 leading-relaxed">{hint}</p>}
+  </div>
+)
 
 export const SettingsForm = ({ onSaved }: Props) => {
   const [form, setForm] = useState<Settings>(SETTINGS_DEFAULTS)
@@ -18,6 +37,7 @@ export const SettingsForm = ({ onSaved }: Props) => {
   const [saved, setSaved] = useState(false)
   const [probeStatus, setProbeStatus] = useState<"idle" | "ok" | "fail">("idle")
   const [probing, setProbing] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   useEffect(() => {
     chrome.storage.local.get(SETTINGS_DEFAULTS, (data) => {
@@ -25,17 +45,16 @@ export const SettingsForm = ({ onSaved }: Props) => {
     })
   }, [])
 
-  const handleChange = (field: keyof Settings, value: string | number) => {
+  const set = (field: keyof Settings, value: string | number) => {
     setForm((prev) => ({ ...prev, [field]: value }))
     setErrors((prev) => ({ ...prev, [field]: undefined }))
     setSaved(false)
   }
 
   const handleSave = () => {
-    const result = settingsSchema.safeParse(form)
+    const result = validateSettings(form)
     if (!result.success) {
-      const flat = result.error.flatten().fieldErrors
-      setErrors(Object.fromEntries(Object.entries(flat).map(([k, v]) => [k, (v as string[])[0]])))
+      setErrors(result.errors)
       return
     }
     void saveSettings(result.data).then(() => {
@@ -55,96 +74,155 @@ export const SettingsForm = ({ onSaved }: Props) => {
 
   return (
     <div className="space-y-4">
-      {/* API Key */}
-      <div>
-        <label htmlFor="apiKey" className="block text-xs font-medium text-gray-700 mb-1">
-          API Key
-        </label>
-        <input
+      {/* Supermemory API Key */}
+      <Field
+        label="Supermemory API Key"
+        error={errors.apiKey}
+        hint={
+          <>
+            Get your key at{" "}
+            <a
+              href="https://supermemory.ai"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-fg-2 transition-colors"
+            >
+              supermemory.ai
+            </a>
+          </>
+        }
+      >
+        <Input
           id="apiKey"
           type="password"
-          className={`w-full border rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-red-400 ${errors.apiKey ? "border-red-400" : "border-gray-300"}`}
           value={form.apiKey}
-          onChange={(e) => handleChange("apiKey", e.target.value)}
-          placeholder="Paste from ~/.supermemory/env"
+          onChange={(e) => set("apiKey", e.target.value)}
+          placeholder="From supermemory.ai dashboard"
+          className={cn("font-mono", errors.apiKey && "ring-1 ring-primary")}
         />
-        {errors.apiKey && <p className="text-xs text-red-500 mt-0.5">{errors.apiKey}</p>}
-        <p className="text-xs text-gray-400 mt-0.5">
-          Run <code className="bg-gray-100 px-1 rounded">supermemory-server</code> then copy the
-          key.
-        </p>
-      </div>
+      </Field>
 
-      {/* Base URL */}
-      <div>
-        <label htmlFor="baseURL" className="block text-xs font-medium text-gray-700 mb-1">
-          Server URL
-        </label>
-        <input
-          id="baseURL"
-          type="text"
-          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-red-400"
-          value={form.baseURL}
-          onChange={(e) => handleChange("baseURL", e.target.value)}
+      {/* AI Provider */}
+      <Field
+        label={
+          <>
+            AI Provider <span className="font-normal text-fg-3">(Ask tab)</span>
+          </>
+        }
+      >
+        <select
+          id="aiProvider"
+          className="w-full rounded-md bg-surface px-3 py-2 text-sm text-fg outline-none focus:ring-1 focus:ring-primary/30 focus:bg-bg transition-all"
+          value={form.aiProvider}
+          onChange={(e) => set("aiProvider", e.target.value)}
+        >
+          {AI_PROVIDERS.map((p) => (
+            <option key={p} value={p}>
+              {AI_PROVIDER_LABELS[p]}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {/* AI API Key */}
+      <Field
+        label={
+          <>
+            {AI_PROVIDER_LABELS[form.aiProvider]} Key{" "}
+            <span className="font-normal text-fg-3">— Ask tab only</span>
+          </>
+        }
+      >
+        <Input
+          id="aiApiKey"
+          type="password"
+          value={form.aiApiKey}
+          onChange={(e) => set("aiApiKey", e.target.value)}
+          placeholder={AI_KEY_PLACEHOLDERS[form.aiProvider]}
+          className="font-mono"
         />
-        <div className="flex items-center gap-2 mt-1">
-          <button
-            type="button"
-            onClick={handleProbe}
-            disabled={probing}
-            className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-          >
-            {probing ? "Testing…" : "Test connection"}
-          </button>
-          {probeStatus === "ok" && <span className="text-xs text-green-600">✓ Connected</span>}
-          {probeStatus === "fail" && <span className="text-xs text-red-500">✗ Not reachable</span>}
-        </div>
-      </div>
+      </Field>
 
       {/* Container Tag */}
-      <div>
-        <label htmlFor="containerTag" className="block text-xs font-medium text-gray-700 mb-1">
-          Container Tag
-        </label>
-        <input
+      <Field label="Container Tag" hint="Groups your memories. Default: user_default">
+        <Input
           id="containerTag"
           type="text"
-          className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-red-400"
           value={form.containerTag}
-          onChange={(e) => handleChange("containerTag", e.target.value)}
+          onChange={(e) => set("containerTag", e.target.value)}
+          className="font-mono"
         />
-        <p className="text-xs text-gray-400 mt-0.5">Groups your memories. Default: user_default</p>
-      </div>
+      </Field>
 
       {/* Gate Threshold */}
-      <div>
-        <label htmlFor="gateThreshold" className="block text-xs font-medium text-gray-700 mb-1">
-          Memory Gate threshold: <span className="font-mono">{form.gateThreshold.toFixed(2)}</span>
-        </label>
+      <Field
+        label={
+          <>
+            Memory Gate threshold:{" "}
+            <span className="font-mono">{form.gateThreshold.toFixed(2)}</span>
+          </>
+        }
+      >
         <input
           id="gateThreshold"
           type="range"
           min={0}
           max={1}
           step={0.05}
-          className="w-full"
+          className="w-full accent-primary"
           value={form.gateThreshold}
-          onChange={(e) => handleChange("gateThreshold", Number.parseFloat(e.target.value))}
+          onChange={(e) => set("gateThreshold", Number.parseFloat(e.target.value))}
         />
-        <div className="flex justify-between text-xs text-gray-400">
+        <div className="flex justify-between text-[11px] text-fg-3 -mt-0.5">
           <span>Save more</span>
           <span>Save less</span>
         </div>
+      </Field>
+
+      {/* Advanced */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="flex items-center gap-1 text-xs text-fg-3 hover:text-fg transition-colors"
+        >
+          {showAdvanced ? (
+            <ChevronDown size={12} strokeWidth={1.5} />
+          ) : (
+            <ChevronRight size={12} strokeWidth={1.5} />
+          )}
+          Advanced
+        </button>
+
+        {showAdvanced && (
+          <div className="mt-3 space-y-3">
+            <Field label="Supermemory Base URL">
+              <Input
+                id="baseURL"
+                type="text"
+                value={form.baseURL}
+                onChange={(e) => set("baseURL", e.target.value)}
+                className="font-mono"
+              />
+            </Field>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={handleProbe} disabled={probing}>
+                {probing ? "Testing…" : "Test connection"}
+              </Button>
+              {probeStatus === "ok" && (
+                <span className="text-[11px] text-green-600">Connected</span>
+              )}
+              {probeStatus === "fail" && (
+                <span className="text-[11px] text-primary">Not reachable</span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Save button */}
-      <button
-        type="button"
-        onClick={handleSave}
-        className="w-full bg-red-500 hover:bg-red-600 text-white text-sm font-medium py-1.5 rounded transition-colors"
-      >
-        {saved ? "✓ Saved" : "Save settings"}
-      </button>
+      <Button className="w-full" onClick={handleSave}>
+        {saved ? "Saved" : "Save settings"}
+      </Button>
     </div>
   )
 }

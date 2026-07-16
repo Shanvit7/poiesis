@@ -5,9 +5,9 @@ import {
   resetMemoryGateCache,
   runGate as runMemoryGate,
 } from "~lib/memory-gate"
+import { incrementStats } from "~lib/stats"
 import type { ExtensionMessage, GateResult } from "~lib/types"
-import { captureSchema } from "~schemas/capture.schema"
-import { SETTINGS_DEFAULTS } from "~schemas/settings.schema"
+import type { CapturePayload } from "~schemas/capture.schema"
 import { probeSupermemory } from "~services/http"
 import { memoryService } from "~services/memory.service"
 
@@ -26,9 +26,9 @@ chrome.runtime.onInstalled.addListener(() => {
   void runOnboarding()
 })
 
-// ── Onboarding handshake ──────────────────────────────────────────────────────
-// Probe localhost:6767. Supermemory Local does not expose a /handshake endpoint
-// as of the current SDK version — user must paste API key in Options if needed.
+// ── Onboarding probe ─────────────────────────────────────────────────────────
+// Probe Supermemory Cloud on install. If unreachable or apiKey is empty,
+// user must open Options and paste their Supermemory API key.
 
 const runOnboarding = async () => {
   const reachable = await probeSupermemory()
@@ -49,13 +49,12 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage) => {
 // ── Capture handler ───────────────────────────────────────────────────────────
 
 const handleCapture = async (rawPayload: unknown): Promise<void> => {
-  // Validate
-  const parsed = captureSchema.safeParse(rawPayload)
-  if (!parsed.success) {
-    logger.warn({ err: parsed.error.flatten() }, "invalid capture payload")
+  // ponytail: manual guard instead of Zod — Parcel can't bundle Zod v4 in SW context.
+  if (!isCapturePayload(rawPayload)) {
+    logger.warn({ rawPayload }, "invalid capture payload")
     return
   }
-  const payload = parsed.data
+  const payload = rawPayload
 
   logger.info(
     { videoId: payload.videoId, watchPercent: payload.watchPercent },
@@ -66,12 +65,9 @@ const handleCapture = async (rawPayload: unknown): Promise<void> => {
   chrome.action.setBadgeText({ text: "" })
 
   // Load threshold from storage
-  const {
-    gateThreshold = SETTINGS_DEFAULTS.gateThreshold,
-    containerTag = SETTINGS_DEFAULTS.containerTag,
-  } = await chrome.storage.local.get({
-    gateThreshold: SETTINGS_DEFAULTS.gateThreshold,
-    containerTag: SETTINGS_DEFAULTS.containerTag,
+  const { gateThreshold = 0.6, containerTag = "user_default" } = await chrome.storage.local.get({
+    gateThreshold: 0.6,
+    containerTag: "user_default",
   })
 
   // ── Gate dispatch ─────────────────────────────────────────────────────────
@@ -115,7 +111,7 @@ const handleCapture = async (rawPayload: unknown): Promise<void> => {
     })
 
     setBadge("✓", "#22c55e")
-    await updateCaptureStats()
+    await incrementStats()
     logger.info({ videoId: payload.videoId, source: result.source }, "memory saved")
   } catch (err) {
     logger.error({ err, videoId: payload.videoId }, "SDK write failed")
@@ -123,22 +119,16 @@ const handleCapture = async (rawPayload: unknown): Promise<void> => {
   }
 }
 
+// ── Minimal type guard (ponytail: replaces Zod safeParse) ─────────────────────
+const isCapturePayload = (v: unknown): v is CapturePayload => {
+  if (!v || typeof v !== "object") return false
+  const o = v as Record<string, unknown>
+  return typeof o.videoId === "string" && o.videoId.length > 0
+}
+
 // ── Badge helpers ─────────────────────────────────────────────────────────────
 
 const setBadge = (text: string, color: string) => {
   chrome.action.setBadgeText({ text })
   chrome.action.setBadgeBackgroundColor({ color })
-}
-
-// ── Capture stats (for popup display) ────────────────────────────────────────
-
-const updateCaptureStats = async () => {
-  const now = new Date()
-  const todayKey = `savedToday_${now.toISOString().slice(0, 10)}`
-  const { [todayKey]: count = 0 } = await chrome.storage.local.get({ [todayKey]: 0 })
-  await chrome.storage.local.set({
-    lastSavedAt: now.toISOString(),
-    [todayKey]: (count as number) + 1,
-    savedToday: (count as number) + 1,
-  })
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 
-import { SETTINGS_DEFAULTS, type Settings } from "~schemas/settings.schema"
+import { SETTINGS_DEFAULTS, type Settings } from "~lib/settings"
 
 // ── Shared settings hook ──────────────────────────────────────────────────────
 // Reads from chrome.storage.local. Keeps in sync via onChanged listener.

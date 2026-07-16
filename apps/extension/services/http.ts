@@ -1,14 +1,15 @@
-// ── Health probe — only non-SDK network call allowed to :6767 ─────────────────
-// Reads baseURL from chrome.storage.local so the probe always targets the
-// server the user actually configured (not a hardcoded localhost).
+import { SUPERMEMORY_BASE_URL } from "~lib/constants"
+
+// ── Health probe — only non-SDK network call to Supermemory ──────────────────
+// Reads baseURL from chrome.storage.local; falls back to cloud default.
 
 export const probeSupermemory = async (): Promise<boolean> => {
-  const { baseURL = "http://localhost:6767" } = await chrome.storage.local.get({
-    baseURL: "http://localhost:6767",
+  const { baseURL = SUPERMEMORY_BASE_URL } = await chrome.storage.local.get({
+    baseURL: SUPERMEMORY_BASE_URL,
   })
   try {
     const res = await fetch(`${baseURL as string}/health`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(5000),
     })
     return res.ok
   } catch {

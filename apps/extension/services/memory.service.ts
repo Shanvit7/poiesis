@@ -18,10 +18,10 @@ export type SearchResult = SearchDocumentsResponse.Result
 export type MemoryProfile = ProfileResponse.Profile
 
 export interface AddMeta {
-  valueScore: number // 0–1 normalized gate score
+  valueScore: number
   gateReason: string
   gateSource: "memory-gate" | "heuristic-fallback"
-  watchedAt: string // ISO
+  watchedAt: string
   containerTag: string
 }
 
@@ -41,12 +41,8 @@ export class MemoryError extends Error {
 
 export class MemoryService {
   private async client(): Promise<Supermemory> {
-    return getSupermemoryClient()
+    return getSupermemoryClient() as Promise<Supermemory>
   }
-
-  // ── Add ───────────────────────────────────────────────────────────────────
-  // content = YouTube URL. Supermemory fetches, transcribes, extracts entities.
-  // customId = youtube:<videoId> for dedup on re-watch.
 
   async add(payload: CapturePayload, meta: AddMeta): Promise<void> {
     logger.info({ videoId: payload.videoId }, "adding memory")
@@ -86,8 +82,6 @@ export class MemoryService {
     }
   }
 
-  // ── Search ────────────────────────────────────────────────────────────────
-
   async search(q: string, containerTag: string, limit = 20): Promise<SearchResult[]> {
     logger.info({ q, containerTag }, "searching memories")
     const client = await this.client()
@@ -100,8 +94,6 @@ export class MemoryService {
     }
   }
 
-  // ── Profile ───────────────────────────────────────────────────────────────
-
   async profile(containerTag: string): Promise<MemoryProfile> {
     logger.info({ containerTag }, "fetching profile")
     const client = await this.client()
@@ -113,8 +105,6 @@ export class MemoryService {
       throw new MemoryError("Profile fetch failed", err)
     }
   }
-
-  // ── List ──────────────────────────────────────────────────────────────────
 
   async list(containerTag: string, limit = 50): Promise<MemoryDocument[]> {
     logger.info({ containerTag, limit }, "listing memories")
@@ -131,8 +121,6 @@ export class MemoryService {
       throw new MemoryError("List failed", err)
     }
   }
-
-  // ── Delete ────────────────────────────────────────────────────────────────
 
   async delete(docId: string): Promise<void> {
     logger.info({ docId }, "deleting memory")

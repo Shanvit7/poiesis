@@ -1,149 +1,140 @@
-# SupaTube
 
-> **Remember what you actually learn on YouTube.**
 
-A Chrome extension that uses on-device AI (**Memory Gate**) to decide what's worth keeping — then makes it instantly searchable through Supermemory Local. Zero cloud. No accounts. 100% private.
+YouTube is everyone's accidental curriculum. Poiesis makes it legible.
 
-Built for the [localhost:6767 Hackathon](https://instinctive-chance-ed9.notion.site/Localhost-6767-392222a60c568030ab86e7729d765bbe) — the Supermemory Local build challenge.
+A Chrome extension that clusters your watch history into **learning threads**, exports every video as a **Markdown note you own**, and enriches each one with the papers, repos, and tools the video references. Bring your own keys. No account, no server.
 
 ---
 
-## Links
+## How it works
 
-| | |
-|---|---|
-| 🌐 Landing page | _deploy URL — coming soon_ |
-| 🎥 Demo video | _≤ 90s — coming soon_ |
-| 📋 Full spec | [`docs/PLAN.md`](docs/PLAN.md) |
-| 🔄 Pivot log | [`docs/PIVOT.md`](docs/PIVOT.md) |
+Poiesis runs entirely inside your browser.
 
----
-
-## What it does
-
-Most YouTube watching produces nothing searchable. SupaTube runs silently in the background:
-
-1. **Watches** what you actually engage with — no manual tagging.
-2. **Memory Gate** (on-device AI via Chrome's built-in model) scores every video for depth and relevance. Shallow content — music, background video, shorts — is ignored.
-3. **Writes** the YouTube URL to [Supermemory Local](https://supermemory.ai) (running at `localhost:6767`). Supermemory transcribes the video, extracts concepts, and updates your profile automatically.
-4. **Recall anytime** via the Side Panel: search, browse your timeline, or see a personalised _For You_ feed built from your taste profile.
+1. **Capture.** The content script tracks what you actually engage with — completion ratio, rewatch, time on screen. An on-device AI scorer (Memory Gate) filters shallow content before anything leaves the tab.
+2. **Store.** Qualifying videos are written to [Supermemory Cloud](https://supermemory.ai) under your own API key — full transcript, metadata, and an entity context that steers recall toward your learning frame.
+3. **Organize.** Learning Threads clusters your history into named topics (*Rust async*, *Diffusion models*) without any manual tagging.
+4. **Export.** Notes Export renders every video as a Markdown file in a folder you pick — Obsidian-compatible, Dataview frontmatter included.
+5. **Enrich.** A background job extracts referenced repos, papers, and tools from each transcript, fetches a one-paragraph summary of each, and writes them back into the note.
 
 ---
 
-## Privacy
 
-- **No data leaves your machine** unless you explicitly set a non-local `baseURL`.
-- Network requests: `youtube.com` (content script) + `localhost:6767` (Supermemory) + Chrome on-device AI APIs only.
-- No analytics, no telemetry, no third-party services.
-- All settings stored in `chrome.storage.local` — never `chrome.storage.sync`.
-
----
-
-## Repo layout
-
-```
-supatube/
-├── apps/
-│   ├── extension/          Plasmo Chrome extension (the product)
-│   │   ├── popup.tsx       Toolbar popup — status + open Side Panel
-│   │   ├── sidepanel.tsx   Workspace shell — Recall / For You / Timeline / Settings
-│   │   ├── options.tsx     API key, container tag, gate threshold
-│   │   ├── background.ts   Service worker — Memory Gate + SDK writes
-│   │   ├── contents/
-│   │   │   └── youtube.tsx Content script — YouTube signal capture
-│   │   ├── lib/
-│   │   │   ├── supermemory.ts      SDK singleton
-│   │   │   ├── memory-gate.ts      On-device AI scorer (Memory Gate)
-│   │   │   └── heuristic-gate.ts   Fallback scorer
-│   │   ├── services/
-│   │   │   └── memory.service.ts   SDK wrapper (add / search / profile / list / delete)
-│   │   ├── hooks/                  use-memory-*.ts (TanStack Query)
-│   │   └── schemas/                Zod schemas — capture payload + settings
-│   └── web/                Single static landing page (Next.js → export)
-│       └── src/app/page.tsx Hero, How it works, Setup, Privacy strip, Footer
-└── docs/
-    ├── PIVOT.md
-    └── PLAN.md
-```
-
----
 
 ## Quick start
 
-### 1 — Install Supermemory Local
+**You need a [Supermemory API key](https://supermemory.ai).** The Recall tab additionally requires a key from OpenAI, Anthropic, or Google AI Studio — any free tier works.
 
 ```bash
-curl -fsSL https://supermemory.ai/install | bash
-```
-
-### 2 — Start the memory server
-
-```bash
-supermemory-server
-# → running at http://localhost:6767
-# → prints your API key on first boot
-```
-
-### 3 — Load the extension
-
-```bash
-# from the repo root:
 pnpm install
-pnpm --filter @supatube/extension dev
+pnpm --filter @poiesis/extension build
 ```
 
-Then in Chrome:
-- Open `chrome://extensions`
-- Enable **Developer mode**
-- **Load unpacked** → select `apps/extension/build/chrome-mv3-dev`
+Load in Chrome:
 
-> The extension auto-detects the running Supermemory server and stores the API key — no manual copy-paste needed if the handshake succeeds.
+1. Open `chrome://extensions`, enable **Developer mode**.
+2. **Load unpacked** → select `apps/extension/build/chrome-mv3-prod`.
+3. Open the extension → **Settings** → paste your Supermemory key.
+
+Start watching YouTube.
 
 ---
+
+
+
+## Development
+
+```bash
+pnpm install                              # one-time workspace install
+pnpm --filter @poiesis/extension dev      # watch mode → chrome-mv3-dev
+pnpm --filter @poiesis/web dev            # landing page
+```
+
+> After the first `dev` build, run `pnpm fix` once to rename `_empty.*.js` chunks that Chrome rejects. Not needed on subsequent reloads.
+
+Reload the Poiesis card in `chrome://extensions` after each change.
+
+### Testing surfaces
+
+
+| Surface             | How to open                                                |
+| ------------------- | ---------------------------------------------------------- |
+| Popup               | Extension icon in the toolbar                              |
+| Side Panel          | Popup → Open Memory Panel                                  |
+| Options             | Right-click extension icon → Options                       |
+| Background logs     | `chrome://extensions` → Poiesis → Service worker → Inspect |
+| Content script logs | Any YouTube tab → DevTools Console                         |
+
+
+
+
+### Gate debugging
+
+Memory Gate scores are logged by the service worker:
+
+```
+chrome://extensions → Poiesis → Service worker → Inspect → Console
+```
+
+```
+gate check: "How Rust async works"
+Memory Gate: score=0.82 reason="technical depth, novel concepts" → saved
+```
+
+Lower the **Gate threshold** in Settings to capture more.
+
+---
+
+
 
 ## Commands
 
-### Root workspace
 
-| Command | What it does |
-|---|---|
-| `pnpm install` | Install all dependencies |
-| `pnpm build` | Build all apps |
-| `pnpm lint` | Lint everything (Biome) |
-| `pnpm check` | Lint + auto-fix |
-| `pnpm format` | Format with Biome |
+| Command        | What it does                   |
+| -------------- | ------------------------------ |
+| `pnpm install` | Install workspace dependencies |
+| `pnpm build`   | Build all packages             |
+| `pnpm lint`    | Lint (Biome)                   |
+| `pnpm check`   | Lint and auto-fix              |
+| `pnpm format`  | Format (Biome)                 |
 
-### Extension (`apps/extension`)
-
-| Command | What it does |
-|---|---|
-| `pnpm --filter @supatube/extension dev` | Build extension + watch for changes |
-| `pnpm --filter @supatube/extension build` | Production build (`.crx` zip) |
-
-### Landing page (`apps/web`)
-
-| Command | What it does |
-|---|---|
-| `pnpm --filter @supatube/web dev` | Local dev server (`localhost:3000`) |
-| `pnpm --filter @supatube/web build` | Static export → `apps/web/out/` |
 
 ---
+
+
 
 ## Stack
 
-| Layer | Choice |
-|---|---|
-| Extension framework | [Plasmo](https://plasmo.com) |
-| Memory store | [Supermemory Local](https://supermemory.ai) `localhost:6767` |
-| Memory client | `supermemory` SDK (sole entrypoint to `:6767`) |
-| On-device AI gate | Chrome built-in model via `window.ai` (**Memory Gate**) |
-| Landing page | Next.js 15 — static export |
-| Styling | Tailwind CSS v4 |
-| Data-fetching (extension) | TanStack Query — Service → Hook → Component |
-| Schema validation | Zod |
-| Linter / formatter | Biome |
+
+| Layer               | Choice                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| Extension framework | [Plasmo](https://plasmo.com)                                           |
+| Memory store        | [Supermemory Cloud](https://supermemory.ai)                            |
+| AI memory tools     | `@supermemory/tools/ai-sdk` — `withSupermemory` middleware             |
+| Recall models       | OpenAI · Anthropic · Gemini via [Vercel AI SDK](https://sdk.vercel.ai) |
+| Memory Gate         | Chrome Built-in AI (`LanguageModel`) + heuristic fallback              |
+| Landing page        | Next.js 15, static export                                              |
+| Styling             | Tailwind CSS v4                                                        |
+| Schema validation   | Zod                                                                    |
+| Linter / formatter  | Biome                                                                  |
+
 
 ---
+
+
+
+## Privacy
+
+Poiesis makes three kinds of outbound requests:
+
+- `youtube.com` — the content script reads the page it's already on.
+- `api.supermemory.ai` — your Supermemory account, your key.
+- Your chosen LLM provider — your key, used only by the Recall tab.
+
+API keys are stored in `chrome.storage.local`. They are never synced, never sent to a Poiesis-owned server. There is no Poiesis server.
+
+No analytics. No telemetry. No third-party tracking.
+
+
 
 ## License
 

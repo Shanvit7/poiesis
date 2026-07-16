@@ -36,7 +36,7 @@ const markVariant = {
 
 export const ComingSoon = () => (
   <main className="flex min-h-svh flex-col items-center justify-center px-6">
-    <div className="flex w-full max-w-[34rem] flex-col items-center text-center">
+    <div className="flex w-full max-w-136 flex-col items-center text-center">
       {/* Mark — the visual anchor, not a nav element */}
       <motion.div variants={markVariant} initial="hidden" animate="show">
         <svg
@@ -44,7 +44,7 @@ export const ComingSoon = () => (
           viewBox="0 0 40 40"
           fill="none"
           aria-hidden="true"
-          className="h-[4.5rem] w-[4.5rem]"
+          className="size-18"
         >
           <rect width="40" height="40" rx="9" style={{ fill: "var(--color-primary)" }} />
           <rect x="9" y="9" width="22" height="5" rx="1.5" fill="white" />
@@ -73,7 +73,7 @@ export const ComingSoon = () => (
         className="mt-5 text-[1rem] leading-[1.72] text-fg-2 text-pretty"
       >
         Saves what you actually watched. Surfaces what to explore next based on your real taste.
-        Search everything in plain English. Fully local — no cloud, no account.
+        Search everything in plain English.
       </motion.p>
 
       {/* Trust */}
@@ -84,9 +84,7 @@ export const ComingSoon = () => (
         animate="show"
         className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
       >
-        <span className="font-mono text-[0.6875rem] text-fg-3">
-          Free forever · Fully local · Open source
-        </span>
+        <span className="font-mono text-[0.6875rem] text-fg-3">Work In Progress · Open source</span>
         <a
           href={GITHUB_URL}
           target="_blank"

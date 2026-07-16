@@ -25,7 +25,7 @@ interface Logger {
 
 export const createLogger = (name: string): Logger => {
   const logger = log.getLogger(name)
-  const tag = `[supatube:${name}]`
+  const tag = `[poiesis:${name}]`
 
   return {
     debug: (data, msg) => logger.debug(tag, msg, data),

@@ -19,7 +19,7 @@ const syneMono = Syne_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "SupaTube — Find any video you've watched",
+  title: "Poiesis — Find any video you've watched",
   description:
     "A Chrome extension that quietly remembers every video you actually watched on YouTube, then lets you search it in plain English. Free, no account, nothing leaves your computer.",
 }
