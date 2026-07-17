@@ -16,10 +16,10 @@ export const ComingSoon = () => {
         initial={{ opacity: 0, y: reduce ? 0 : 22 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-        className="relative flex w-full max-w-[56rem] flex-col"
+        className="relative flex w-full max-w-4xl flex-col"
       >
         {/* Status chip — devs read comments, not badges */}
-        <div className="flex items-center gap-2.5 mb-9">
+        <div className="flex items-center gap-2.5 mb-10 sm:mb-9">
           <span aria-hidden className="block size-[5px] rounded-full bg-primary shrink-0" />
           <span className="font-mono text-[0.6875rem] text-muted tracking-wide">
             {"// work in progress · open source"}
@@ -27,7 +27,7 @@ export const ComingSoon = () => {
         </div>
 
         {/* Headline */}
-        <h1 className="text-[clamp(2.25rem,4vw,3rem)] font-extrabold leading-[0.92] tracking-[-0.03em] text-fg">
+        <h1 className="text-[1.75rem] sm:text-[clamp(2.25rem,4vw,3rem)] font-extrabold leading-[1.05] sm:leading-[0.92] tracking-[-0.03em] text-fg">
           Point it at a video.
           <br />
           <motion.span
@@ -45,14 +45,14 @@ export const ComingSoon = () => {
         </h1>
 
         {/* Sub */}
-        <p className="mt-7 text-[1rem] leading-[1.72] text-fg/75 max-w-[52ch] text-pretty">
+        <p className="mt-8 sm:mt-7 text-[0.9375rem] sm:text-[1rem] leading-[1.72] text-fg/75 max-w-[52ch] text-pretty">
           <span className="text-fg">Poiesis</span> watches a YouTube tutorial and builds the project
           — chapter by chapter, decision by decision. You follow along and actually understand
           what's being made and why.
         </p>
 
         {/* 3-step flow */}
-        <ol className="mt-8 flex flex-col gap-3">
+        <ol className="mt-8 sm:mt-8 flex flex-col gap-3.5 sm:gap-3">
           {(
             [
               ["Ingest", "chapters, stack, concepts, prereqs"],
@@ -60,7 +60,7 @@ export const ComingSoon = () => {
               ["Build", "pi codes through each chapter while you follow along"],
             ] as const
           ).map(([step, desc], i) => (
-            <li key={step} className="flex items-baseline gap-3">
+            <li key={step} className="flex items-start gap-3">
               <span className="font-mono text-[0.6875rem] text-muted select-none tabular-nums w-4 shrink-0">
                 {i + 1}.
               </span>
@@ -82,7 +82,7 @@ export const ComingSoon = () => {
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-[7px] font-mono text-[0.6875rem] text-fg no-underline transition-opacity hover:opacity-50"
+            className="inline-flex items-center gap-[7px] font-mono text-[0.6875rem] text-fg no-underline transition-opacity hover:opacity-50 -my-3 py-3 -mx-1 px-1"
           >
             <GithubIcon size={12} />
             Star on GitHub

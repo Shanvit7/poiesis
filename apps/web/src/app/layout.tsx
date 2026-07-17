@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Azeret_Mono, Oxanium } from "next/font/google"
 import "@/app/globals.css"
 
@@ -19,8 +19,14 @@ const mono = Azeret_Mono({
   variable: "--ff-mono",
 })
 
+export const viewport: Viewport = {
+  viewportFit: "cover",
+  width: "device-width",
+  initialScale: 1,
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://shanvit7.github.io/poesis"),
+  metadataBase: new URL("https://shanvit7.github.io/poiesis"),
   title: "Poiesis — Point it at a tutorial. It codes. You understand.",
   description:
     "Poiesis watches a YouTube coding tutorial and builds the project chapter by chapter — narrating every decision so you actually understand what is being made and why.",
@@ -36,7 +42,7 @@ export const metadata: Metadata = {
     title: "Poiesis — It codes. You understand.",
     description:
       "Point it at a YouTube tutorial. Poiesis builds the project chapter by chapter, narrating every decision in real time.",
-    url: "https://shanvit7.github.io/poesis",
+    url: "https://shanvit7.github.io/poiesis",
     siteName: "Poiesis",
     type: "website",
     locale: "en_US",
@@ -48,7 +54,7 @@ export const metadata: Metadata = {
       "Point it at a YouTube tutorial. Poiesis builds the project chapter by chapter, narrating every decision in real time.",
   },
   robots: { index: true, follow: true },
-  alternates: { canonical: "https://shanvit7.github.io/poesis" },
+  alternates: { canonical: "https://shanvit7.github.io/poiesis" },
 }
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => (
