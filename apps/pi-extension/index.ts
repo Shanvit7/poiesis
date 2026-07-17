@@ -313,35 +313,44 @@ export default function (pi: ExtensionAPI) {
 
   // Project location tool — pi calls this during the grill conversation once user decides
   pi.registerTool({
-    name: 'poiesis_set_project',
-    label: 'Poiesis: Set Project Location',
-    description: 'Save the project directory chosen during the tutor conversation. Call this once the user has told you where they want the project and what to name it.',
-    promptSnippet: 'Lock in the project location',
+    name: "poiesis_set_project",
+    label: "Poiesis: Set Project Location",
+    description:
+      "Save the project directory chosen during the tutor conversation. Call this once the user has told you where they want the project and what to name it.",
+    promptSnippet: "Lock in the project location",
     promptGuidelines: [
-      'Call poiesis_set_project as soon as the user tells you where to put the project and what name to use.',
+      "Call poiesis_set_project as soon as the user tells you where to put the project and what name to use.",
       'Resolve common shorthands: "desktop" → ~/Desktop, "downloads" → ~/Downloads, "projects" → ~/projects.',
-      'The user home dir is available from the HOME env var or by running `echo $HOME` if needed.',
-      'Call this BEFORE the user runs /poiesis build.',
+      "The user home dir is available from the HOME env var or by running `echo $HOME` if needed.",
+      "Call this BEFORE the user runs /poiesis build.",
     ],
     parameters: Type.Object({
-      slug:   Type.String({ description: 'The video slug (from the tutor context)' }),
-      dir:    Type.String({ description: 'Resolved absolute path to the parent directory, e.g. /Users/john/Desktop' }),
-      name:   Type.String({ description: 'Folder name for the project, e.g. hono-lab' }),
+      slug: Type.String({ description: "The video slug (from the tutor context)" }),
+      dir: Type.String({
+        description: "Resolved absolute path to the parent directory, e.g. /Users/john/Desktop",
+      }),
+      name: Type.String({ description: "Folder name for the project, e.g. hono-lab" }),
     }),
     async execute(_id, params, _signal, _onUpdate, _ctx) {
-      const cfg = loadConfig();
-      if (!cfg) return { content: [{ type: 'text' as const, text: 'No poiesis config found. Run /poiesis <url> first.' }], details: {} };
-      const stateDir = expandHome(cfg.state_dir);
-      const projectDir = resolve(join(params.dir, params.name));
-      const projectDirFile = `${stateDir}/builds/${params.slug}/project-dir.txt`;
-      mkdirSync(`${stateDir}/builds/${params.slug}`, { recursive: true });
-      writeFileSync(projectDirFile, projectDir);
+      const cfg = loadConfig()
+      if (!cfg)
+        return {
+          content: [
+            { type: "text" as const, text: "No poiesis config found. Run /poiesis <url> first." },
+          ],
+          details: {},
+        }
+      const stateDir = expandHome(cfg.state_dir)
+      const projectDir = resolve(join(params.dir, params.name))
+      const projectDirFile = `${stateDir}/builds/${params.slug}/project-dir.txt`
+      mkdirSync(`${stateDir}/builds/${params.slug}`, { recursive: true })
+      writeFileSync(projectDirFile, projectDir)
       return {
-        content: [{ type: 'text' as const, text: `Project locked in at: ${projectDir}` }],
+        content: [{ type: "text" as const, text: `Project locked in at: ${projectDir}` }],
         details: { projectDir },
-      };
+      }
     },
-  });
+  })
 
   // /poiesis <url>  → ingest + tutor session
   // /poiesis build  → plan capture + chapter doc generation + lab start

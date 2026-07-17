@@ -1,6 +1,6 @@
-import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
-import type { IngestResult } from './types.ts';
-import { exists } from './utils.ts';
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent"
+import type { IngestResult } from "./types.ts"
+import { exists } from "./utils.ts"
 
 // ponytail: project location is now asked by pi in conversation via poiesis_set_project tool
 
@@ -9,30 +9,30 @@ import { exists } from './utils.ts';
  * poiesis_set_project to lock it in — no ctx.ui prompts here.
  */
 export const grill = async (
-	pi: ExtensionAPI,
-	ctx: ExtensionContext,
-	ingest: IngestResult,
-	stateDir: string,
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  ingest: IngestResult,
+  stateDir: string
 ): Promise<void> => {
-	// Don't re-inject the tutor if the plan already exists
-	const planPath = `${stateDir}/builds/${ingest.slug}/plan.json`;
-	if (exists(planPath)) {
-		ctx.ui.notify(`Session already set up for "${ingest.slug}". Run /poiesis build.`, 'info');
-		return;
-	}
+  // Don't re-inject the tutor if the plan already exists
+  const planPath = `${stateDir}/builds/${ingest.slug}/plan.json`
+  if (exists(planPath)) {
+    ctx.ui.notify(`Session already set up for "${ingest.slug}". Run /poiesis build.`, "info")
+    return
+  }
 
-	const chapterList = ingest.chapters
-		.map((ch) => {
-			const ts = `${Math.floor(ch.start / 60)}:${String(ch.start % 60).padStart(2, '0')}`;
-			return `  ${ch.n}. ${ch.title} [${ts}] — ${ch.topics.join(', ')}`;
-		})
-		.join('\n');
+  const chapterList = ingest.chapters
+    .map((ch) => {
+      const ts = `${Math.floor(ch.start / 60)}:${String(ch.start % 60).padStart(2, "0")}`
+      return `  ${ch.n}. ${ch.title} [${ts}] — ${ch.topics.join(", ")}`
+    })
+    .join("\n")
 
-	const prereqList = ingest.prereqs.length ? ingest.prereqs.join(', ') : 'none listed';
-	const stack = ingest.detected_stack.join(', ') || 'not clearly identified';
+  const prereqList = ingest.prereqs.length ? ingest.prereqs.join(", ") : "none listed"
+  const stack = ingest.detected_stack.join(", ") || "not clearly identified"
 
-	pi.sendUserMessage(
-		`You are a senior engineering tutor starting a lab session. The source material is **"${ingest.title}"** by ${ingest.channel} (${Math.floor(ingest.duration_sec / 60)} min). The video slug is \`${ingest.slug}\`.
+  pi.sendUserMessage(
+    `You are a senior engineering tutor starting a lab session. The source material is **"${ingest.title}"** by ${ingest.channel} (${Math.floor(ingest.duration_sec / 60)} min). The video slug is \`${ingest.slug}\`.
 
 ## What you already know about the video
 ${ingest.notes}
@@ -67,6 +67,6 @@ Early in the conversation — after you know what they're building — ask where
 
 Do this **before** they run \`/poiesis build\`. Confirm the path back to them once locked in.
 
-Start now. First question: what are they actually trying to build or learn, and why now? One direct question, then stop.`,
-	);
-};
+Start now. First question: what are they actually trying to build or learn, and why now? One direct question, then stop.`
+  )
+}

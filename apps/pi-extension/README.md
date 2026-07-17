@@ -1,8 +1,8 @@
 # @poiesis/pi-extension
 
-A pi extension that turns a YouTube coding tutorial into a **guided lab session**.
+A pi extension that turns a YouTube coding tutorial into a **guided build session**.
 
-Pi reads the video deeply, then acts as your **tutor**: asks questions, recommends patterns, corrects bad tech choices, and guides you through building each chapter yourself.
+Pi reads the video deeply, then **codes through it chapter by chapter** — explaining every decision, flagging outdated patterns, and making sure you actually understand what's being built.
 
 ---
 
@@ -20,10 +20,10 @@ Pi reads the video deeply, then acts as your **tutor**: asks questions, recommen
 | **1. Ingest** | Gemini reads the YouTube URL natively — transcripts, chapters, stack detection, key concepts |
 | **2. Grill** | One deterministic question: *where should the project be created?* (defaults to `<cwd>/<slug>`). Then pi injects a tutor persona — non-deterministic conversation from there: questions, recommendations, pushback on wrong tech choices. |
 | **3. Scaffold** | Local git repo created at the chosen path |
-| **4. Build chapters** | For each chapter, Gemini writes a `docs/chapter-N-title.md` lab guide (exercises, key concepts, common mistakes, tutor recommendations). Pi kicks off each chapter in chat. |
+| **4. Build chapters** | For each chapter, pi writes the code and a `docs/chapter-N-title.md` companion (key concepts, decisions made, what to watch out for). Pi narrates every step in chat. |
 | **5. Finalize** | `POIESIS.md` manifest with video timestamp links. Everything committed locally. |
 
-The code in the chapters? **You write it**, with pi guiding you. That's the whole point.
+Pi writes the code. Your job is to follow along, ask questions, and understand every decision. That's the whole point.
 
 ---
 
@@ -74,7 +74,7 @@ Open pi in the `poiesis/` project root. The extension loads automatically.
 
 # pi will ask 3 quick questions (stack, depth, skip which chapters?),
 # then scaffold a local repo and generate chapter lab docs.
-# You work through each chapter in your editor while pi tutors you in chat.
+# Pi codes through each chapter, narrating decisions in chat. You follow along and understand.
 ```
 
 ---

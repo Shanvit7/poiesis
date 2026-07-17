@@ -8,7 +8,7 @@ export const ComingSoon = () => {
   const reduce = useReducedMotion()
 
   return (
-    <main className="relative flex min-h-svh flex-col items-center justify-center px-6 py-20">
+    <main className="relative flex min-h-svh flex-col items-center justify-center px-5 py-16 sm:px-10">
       {/* Atmospheric bleed — primary hue softly radiates into the dark bg */}
       <div aria-hidden className="bg-glow pointer-events-none absolute inset-0" />
 
@@ -16,7 +16,7 @@ export const ComingSoon = () => {
         initial={{ opacity: 0, y: reduce ? 0 : 22 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
-        className="relative flex w-full max-w-[40rem] flex-col"
+        className="relative flex w-full max-w-[56rem] flex-col"
       >
         {/* Status chip — devs read comments, not badges */}
         <div className="flex items-center gap-2.5 mb-9">
@@ -27,7 +27,7 @@ export const ComingSoon = () => {
         </div>
 
         {/* Headline */}
-        <h1 className="text-[clamp(2.75rem,7vw,5rem)] font-extrabold leading-[0.94] tracking-[-0.03em] text-fg">
+        <h1 className="text-[clamp(2.25rem,4vw,3rem)] font-extrabold leading-[0.92] tracking-[-0.03em] text-fg">
           Point it at a video.
           <br />
           <motion.span
@@ -40,15 +40,15 @@ export const ComingSoon = () => {
             }}
             className="text-primary"
           >
-            Build it yourself.
+            It codes. You understand.
           </motion.span>
         </h1>
 
         {/* Sub */}
-        <p className="mt-7 text-[1rem] leading-[1.72] text-fg/75 max-w-[44ch] text-pretty">
-          <span className="text-fg">Poiesis</span> is your AI coding tutor for YouTube tutorials. It
-          reads the video deeply, asks the right questions, and guides you through building the
-          project — chapter by chapter.
+        <p className="mt-7 text-[1rem] leading-[1.72] text-fg/75 max-w-[52ch] text-pretty">
+          <span className="text-fg">Poiesis</span> watches a YouTube tutorial and builds the project
+          — chapter by chapter, decision by decision. You follow along and actually understand
+          what's being made and why.
         </p>
 
         {/* 3-step flow */}
@@ -56,8 +56,8 @@ export const ComingSoon = () => {
           {(
             [
               ["Ingest", "chapters, stack, concepts, prereqs"],
-              ["Tutor", "asks questions, recommends patterns, corrects assumptions"],
-              ["Lab", "you write the code; the agent tutors you through it"],
+              ["Guide", "explains patterns, flags outdated choices, narrates decisions"],
+              ["Build", "pi codes through each chapter while you follow along"],
             ] as const
           ).map(([step, desc], i) => (
             <li key={step} className="flex items-baseline gap-3">
