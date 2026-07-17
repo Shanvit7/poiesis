@@ -20,9 +20,35 @@ const mono = Azeret_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Poiesis — Watch a tutorial. Get the codebase.",
+  metadataBase: new URL("https://shanvit7.github.io/poesis"),
+  title: "Poiesis — Point it at a tutorial. It codes. You understand.",
   description:
-    "Point it at a YouTube coding tutorial. Get a git repo on your GitHub — commit by commit, chapter by chapter. No notes. No pausing. The learning artifact is a repo.",
+    "Poiesis watches a YouTube coding tutorial and builds the project chapter by chapter — narrating every decision so you actually understand what is being made and why.",
+  keywords: [
+    "AI coding tutor",
+    "YouTube tutorial",
+    "learn to code",
+    "AI pair programmer",
+    "coding education",
+    "tutorial to codebase",
+  ],
+  openGraph: {
+    title: "Poiesis — It codes. You understand.",
+    description:
+      "Point it at a YouTube tutorial. Poiesis builds the project chapter by chapter, narrating every decision in real time.",
+    url: "https://shanvit7.github.io/poesis",
+    siteName: "Poiesis",
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title: "Poiesis — It codes. You understand.",
+    description:
+      "Point it at a YouTube tutorial. Poiesis builds the project chapter by chapter, narrating every decision in real time.",
+  },
+  robots: { index: true, follow: true },
+  alternates: { canonical: "https://shanvit7.github.io/poesis" },
 }
 
 const RootLayout = ({ children }: { children: React.ReactNode }) => (
