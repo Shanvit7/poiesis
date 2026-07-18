@@ -15,29 +15,19 @@
   "license": "MIT",
   "type": "module",
   "main": "./index.ts",
-  "files": [
-    "index.ts",
-    "src",
-    "skills",
-    "README.md"
-  ],
+  "files": ["index.ts", "src", "skills", "README.md"],
   "publishConfig": {
     "access": "public"
   },
   "pi": {
-    "extensions": [
-      "./index.ts",
-      "node_modules/@juicesharp/rpiv-ask-user-question/index.ts"
-    ],
+    "extensions": ["./index.ts", "node_modules/@juicesharp/rpiv-ask-user-question/index.ts"],
     "skills": ["./skills"]
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
     "@juicesharp/rpiv-ask-user-question": "*"
   },
-  "bundledDependencies": [
-    "@juicesharp/rpiv-ask-user-question"
-  ],
+  "bundledDependencies": ["@juicesharp/rpiv-ask-user-question"],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
