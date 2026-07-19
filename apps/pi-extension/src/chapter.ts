@@ -4,8 +4,22 @@ import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-c
 import { GoogleGenAI } from "@google/genai"
 import { setChapterMeta } from "./progress.ts"
 import { readProgress } from "./progress.ts"
-import type { ChapterKind, RecentProject, UserProfile } from "./types.ts"
-import { exists, expandHome } from "./utils.ts"
+import {
+  implementPrompt,
+  planPrompt,
+  prereqPrompt,
+  theoryPrompt as theoryStepPrompt,
+  writeTestsPrompt,
+} from "./steps.ts"
+import type {
+  ChapterKind,
+  ChapterState,
+  ChapterStep,
+  RecentProject,
+  Roadmap,
+  UserProfile,
+} from "./types.ts"
+import { exists, expandHome, readChapterState, writeChapterState } from "./utils.ts"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -107,22 +121,77 @@ export const appendReflection = (projectDir: string, chapter: number, reflection
 export const checkOffChapter = (projectDir: string, chapter: number, kind: ChapterKind): void => {
   const path = roadmapJsonFile(projectDir)
   if (!exists(path)) return
-  const roadmap = JSON.parse(readFile(path)) as {
-    name: string
-    chapters: Array<{
-      n: number
-      title: string
-      duration: string
-      done: boolean
-      kind: ChapterKind | null
-    }>
-  }
+  const roadmap = JSON.parse(readFile(path)) as Roadmap
   const entry = roadmap.chapters.find((c) => c.n === chapter)
   if (entry) {
     entry.done = true
     entry.kind = kind
   }
   writeFile(path, JSON.stringify(roadmap, null, 2))
+}
+
+/**
+ * Build a compact past-chapters summary for the system prompt.
+ * Reads only the ## Reflection block — never loads full chapter markdown.
+ * ~1–3 lines per past chapter regardless of chapter length.
+ * ponytail: grep reflection only — avoids loading full chapter markdown
+ */
+export const buildPastChaptersSummary = (projectDir: string, upTo: number): string => {
+  const roadmapPath = roadmapJsonFile(projectDir)
+  if (!exists(roadmapPath)) return ""
+  const roadmap = JSON.parse(readFile(roadmapPath)) as Roadmap
+  const progress = readProgress(projectDir)
+  return roadmap.chapters
+    .filter((c) => c.done && c.n < upTo)
+    .map((c) => {
+      const chFile = chapterFile(projectDir, c.n)
+      const reflection = exists(chFile)
+        ? (readFile(chFile)
+            .match(/## Reflection\n\n([\s\S]+?)(?=\n##|$)/)?.[1]
+            ?.trim() ?? "")
+        : ""
+      const status =
+        c.kind === "theory"
+          ? "\u2705 done"
+          : progress.chapters[c.n]?.testsPass
+            ? "\u2705 tests pass"
+            : "\u26a0\ufe0f incomplete"
+      return `${c.n} \u2014 ${c.title} (${c.kind ?? "code"}, ${status})\n   Reflection: ${reflection || "(none recorded)"}`.trim()
+    })
+    .join("\n")
+}
+
+/**
+ * Build the full chapter context block injected into the system prompt via before_agent_start.
+ * Past chapters: compact (reflection only, ~300 tokens for 10 chapters).
+ * Current chapter markdown trimmed to ~8 000 chars.
+ */
+export const buildChapterContext = (
+  projectDir: string,
+  chapterMd: string,
+  profile: UserProfile,
+  n: number
+): string => {
+  const roadmapPath = roadmapJsonFile(projectDir)
+  const roadmap = exists(roadmapPath) ? (JSON.parse(readFile(roadmapPath)) as Roadmap) : null
+  const title = roadmap?.chapters.find((c) => c.n === n)?.title ?? `Chapter ${n}`
+  const stack = profile.primaryStack.join(", ") || "unknown"
+  const projects = profile.recentProjects
+    .map((p) => `  - ${p.name}: ${p.summary} [${p.stack.join(", ")}]`)
+    .join("\n")
+  const past = buildPastChaptersSummary(projectDir, n)
+  const trimmed =
+    chapterMd.length > 8000 ? `${chapterMd.slice(0, 8000)}\n\u2026(truncated)` : chapterMd
+
+  return [
+    `## Active Chapter: ${n} \u2014 ${title}`,
+    `Student stack: ${stack}`,
+    `Recent projects:\n${projects}`,
+    past ? `\n## Completed chapters\n${past}` : "",
+    `\n## Current chapter content\n${trimmed}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
 }
 
 /**
@@ -199,6 +268,13 @@ Then quiz with 1–2 questions via ask_user_question:
 6. Revert to the correct implementation
 This makes the wrong path a teaching moment, not a dead end.
 
+⚠️ LIVE RESEARCH RULE — you are a tutor, not a search engine from training data:
+- Before explaining any concept: look up the official docs or spec with agent-browser
+  so the explanation is current and accurate, not a recollection.
+- Student challenges a claim: open the authoritative source live and settle it from
+  evidence. Never argue from memory.
+- You catch yourself saying "I think" or "I believe": stop, look it up, confirm first.
+
 **Step 3 — Propose a test plan (DO NOT write code or call ask_user_question)**
 Think of tests as learning checkpoints — each one proves the student built something real.
 
@@ -239,10 +315,22 @@ After writing: "Done — <your test file> is our contract. Let's make these pass
 4. "What & why" narration: before each significant code block, one sentence on WHAT
    you're adding and WHY — not a lecture, just intent.
 
-5. Wrong-answer TDD on design choices: if the student picks a wrong design,
+5. LIVE WEB RESEARCH — use agent-browser instead of guessing in any of these cases:
+   a) TEACHING: before explaining a concept, look up the official docs or spec so the
+      explanation is accurate, not a recollection. MDN, framework docs, stdlib refs.
+   b) IN DEBATE: student challenges a claim → open the authoritative source live,
+      quote it, settle it from evidence. Never argue from memory.
+   c) SELF-CONFLICT: you catch yourself saying "I think..." or holding two contradicting
+      ideas → stop and look it up before continuing.
+   d) PACKAGES / APIs: before writing code that imports anything unfamiliar, check the
+      actual API signature. pi.dev/packages, npmjs.com, or the GitHub README.
+   e) ERRORS: unfamiliar error message → look it up. Don't guess the cause.
+   Rule: if it's version-sensitive, spec-sensitive, or you'd say "I believe" — look it up.
+
+6. Wrong-answer TDD on design choices: if the student picks a wrong design,
    implement it → call poiesis_run_tests → show failure → explain → correct.
 
-6. If a command fails 3 times: THEN explain and ask the student. Otherwise handle silently.
+7. If a command fails 3 times: THEN explain and ask the student. Otherwise handle silently.
 
 Your code MUST make the test file you wrote pass. Don't modify the test file.
 If a test seems wrong: raise it via ask_user_question before touching it.
@@ -276,6 +364,13 @@ Then:
    - Needed primer: "What is X?" / "Why Y instead of Z?"
 3. Wrong answer → gently correct with a brief explanation, then re-ask.
 4. Once they demonstrate understanding of all key concepts, call \`poiesis_chapter_done\`.
+
+⚠️ LIVE RESEARCH RULE — you are a tutor, not a static knowledge base:
+- Before explaining any concept: look up the official docs or spec with agent-browser
+  so the explanation is current and accurate, not a recollection.
+- Student challenges a claim: open the authoritative source live and quote it.
+  Never argue from memory.
+- You catch yourself saying "I think" or "I believe": stop, look it up first.
 `
       : ""
 
@@ -297,13 +392,17 @@ ${tddSection}${theoryGate}`
 // ── runChapter ────────────────────────────────────────────────────────────────
 
 /**
- * Orchestrate one chapter: classify → inject prompt → hand off to LLM.
+ * Orchestrate one chapter: read state → resume from correct step.
+ *
+ * setSession is injected by index.ts to avoid a circular import.
+ * It sets the module-level _projectDir / _chapterNum used by gate tools + event handlers.
  */
 export const runChapter = async (
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
   profile: UserProfile,
-  projectDir: string
+  projectDir: string,
+  setSession: (dir: string, n: number) => void
 ): Promise<void> => {
   const p = readProgress(projectDir)
   const n = p.current
@@ -314,34 +413,65 @@ export const runChapter = async (
     return
   }
 
-  const chapterMd = readFile(expandHome(path))
+  // Register session state FIRST so gate tools and event handlers see it immediately
+  setSession(projectDir, n)
 
-  // Classify (Gemini) — updates .progress.json
-  ctx.ui.setStatus("poiesis", ` Classifying chapter ${n}…`)
-  let kind: ChapterKind = "code"
-  try {
-    kind = await classifyChapter(chapterMd, profile.primaryStack)
-  } catch {
-    // ponytail: fall back to 'code' if Gemini is unavailable
+  const profileContext = [
+    `Stack: ${profile.primaryStack.join(", ") || "unknown"}`,
+    "Projects:",
+    ...profile.recentProjects.map((pr) => `  - ${pr.name}: ${pr.summary} [${pr.stack.join(", ")}]`),
+  ].join("\n")
+
+  const existingState = readChapterState(projectDir, n)
+
+  // Fresh start: classify then write initial state
+  if (!existingState) {
+    ctx.ui.setStatus("poiesis", ` Classifying chapter ${n}\u2026`)
+    let kind: ChapterKind = "code"
+    try {
+      kind = await classifyChapter(readFile(path), profile.primaryStack)
+    } catch {
+      // ponytail: fall back to 'code' if Gemini is unavailable
+    }
+    setChapterMeta(projectDir, n, kind, null)
+    ctx.ui.setStatus("poiesis", undefined)
+
+    const initialStep: ChapterStep = kind === "theory" ? "theory" : "prereq"
+    writeChapterState(projectDir, n, {
+      step: initialStep,
+      prereqResult: null,
+      testsFile: null,
+      testsPlan: [],
+      testsPass: false,
+      startedAt: new Date().toISOString(),
+    })
+
+    if (kind === "theory") {
+      pi.sendUserMessage(theoryStepPrompt("familiar", n))
+    } else {
+      pi.sendUserMessage(prereqPrompt(profileContext))
+    }
+    return
   }
 
-  // pi decides the test file and runner from context — no heuristic here
-  setChapterMeta(projectDir, n, kind, null)
-  ctx.ui.setStatus("poiesis", undefined)
-
-  // Read techstack.md — lets the agent know the runtime/PM/framework without asking
-  const tsPath = techstackFile(projectDir)
-  const techstackMd = exists(tsPath) ? readFile(expandHome(tsPath)) : ""
-
-  const prompt = chapterPrompt(
-    chapterMd,
-    kind,
-    n,
-    techstackMd,
-    profile.primaryStack,
-    profile.recentProjects
-  )
-  await pi.sendUserMessage(prompt)
+  // Resume: dispatch to the correct step
+  switch (existingState.step) {
+    case "prereq":
+      pi.sendUserMessage(prereqPrompt(profileContext))
+      break
+    case "theory":
+      pi.sendUserMessage(theoryStepPrompt(existingState.prereqResult ?? "familiar", n))
+      break
+    case "plan":
+      pi.sendUserMessage(planPrompt(n))
+      break
+    case "write-tests":
+      pi.sendUserMessage(writeTestsPrompt(existingState.testsPlan))
+      break
+    case "implement":
+      pi.sendUserMessage(implementPrompt(existingState.testsFile ?? "(unknown)", n))
+      break
+  }
 }
 
 // ── self-check ────────────────────────────────────────────────────────────────
@@ -367,7 +497,10 @@ if (process.argv[1]?.endsWith("chapter.ts")) {
       JSON.stringify(
         {
           name: "Project",
-          chapters: [{ n: 1, title: "Intro", duration: "0:00-5:00", done: false, kind: null }],
+          chapters: [
+            { n: 1, title: "Intro", duration: "0:00-5:00", done: false, kind: null },
+            { n: 2, title: "Middleware", duration: "5:00-10:00", done: false, kind: null },
+          ],
         },
         null,
         2
@@ -427,6 +560,14 @@ if (process.argv[1]?.endsWith("chapter.ts")) {
     console.assert(prompt.includes("NEVER runs commands manually"), "agent must own all shell")
     console.assert(prompt.includes("non-interactive flags"), "must guide on non-interactive CLIs")
     console.assert(prompt.includes("fails 3 times"), "must define retry-then-escalate rule")
+    console.assert(
+      prompt.includes("LIVE WEB RESEARCH"),
+      "code chapter must include live web research rule"
+    )
+    console.assert(
+      prompt.includes("LIVE RESEARCH RULE"),
+      "code chapter theory+quiz step must include live research rule"
+    )
     // experienceLevel must NOT be statically baked in
     console.assert(!prompt.includes("experienceLevel"), "experienceLevel must not appear in prompt")
     // theory chapter
@@ -438,6 +579,44 @@ if (process.argv[1]?.endsWith("chapter.ts")) {
     console.assert(theoryPrompt.includes("Theory chapter"), "theory gate missing")
     console.assert(theoryPrompt.includes("Prerequisite gate"), "theory also needs Step 0 gate")
     console.assert(theoryPrompt.includes("what and why"), "theory also needs what-and-why")
+    console.assert(
+      theoryPrompt.includes("LIVE RESEARCH RULE"),
+      "theory chapter must include live research rule"
+    )
+
+    // buildPastChaptersSummary — run AFTER checkOffChapter + appendReflection so chapter 1 is done
+    const past = buildPastChaptersSummary(dir, 2) // upTo=2: chapter 1 (n=1 < 2) included
+    console.assert(past.includes("1 — Intro"), `past summary missing chapter 1: ${past}`)
+    console.assert(!past.includes("2 —"), `past summary must not include chapter 2: ${past}`)
+    console.assert(past.includes("Reflection:"), `past summary missing reflection label: ${past}`)
+    console.assert(
+      past.includes("Learned about routing."),
+      `past summary missing reflection text: ${past}`
+    )
+    // no past chapters when upTo=1
+    const noPast = buildPastChaptersSummary(dir, 1)
+    console.assert(noPast === "", `upTo=1 should return empty string: '${noPast}'`)
+
+    // buildChapterContext
+    const testProf: UserProfile = {
+      primaryStack: ["TypeScript"],
+      recentProjects: [{ name: "hono-api", summary: "REST API", stack: ["TypeScript"] }],
+      recentActivity: "building APIs",
+      scannedAt: new Date().toISOString(),
+    }
+    const ctxOut = buildChapterContext(dir, "# Ch2\nContent here.", testProf, 2)
+    console.assert(
+      ctxOut.includes("## Active Chapter: 2 — Middleware"),
+      `context missing chapter header: ${ctxOut.slice(0, 300)}`
+    )
+    console.assert(
+      ctxOut.includes("## Completed chapters"),
+      `context missing completed section: ${ctxOut.slice(0, 300)}`
+    )
+    console.assert(ctxOut.includes("## Current chapter content"), "context missing content section")
+    console.assert(ctxOut.includes("TypeScript"), "context missing stack")
+    console.assert(ctxOut.includes("hono-api"), "context missing project")
+    console.assert(ctxOut.includes("# Ch2"), "context missing chapter markdown")
 
     rmSync(dir, { recursive: true })
     console.log("chapter.ts: ok")

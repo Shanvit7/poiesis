@@ -15,7 +15,12 @@
   "license": "MIT",
   "type": "module",
   "main": "./index.ts",
-  "files": ["index.ts", "src", "skills", "README.md"],
+  "scripts": {
+    "eval": "promptfoo eval",
+    "eval:view": "promptfoo view",
+    "eval:ci": "promptfoo eval --ci --no-cache"
+  },
+  "files": ["index.ts", "src", "prompts", "skills", "README.md"],
   "publishConfig": {
     "access": "public"
   },
@@ -34,6 +39,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "promptfoo": "^0.121.19",
     "typescript": "^7.0.2"
   }
 }

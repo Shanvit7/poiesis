@@ -1,13 +1,45 @@
+import { existsSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import { DynamicBorder, getSelectListTheme } from "@earendil-works/pi-coding-agent"
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { Container, type SelectItem, SelectList, Spacer, Text } from "@earendil-works/pi-tui"
 import { Type } from "typebox"
-import { appendReflection, appendTddStatus, checkOffChapter, runChapter } from "./src/chapter.ts"
+import {
+  appendReflection,
+  appendTddStatus,
+  buildChapterContext,
+  checkOffChapter,
+  runChapter,
+  writeTddSection,
+} from "./src/chapter.ts"
 import { PROFILE_PATH, needsOnboarding, runOnboarding } from "./src/onboarding.ts"
-import { advanceChapter, markTestsPass, readProgress } from "./src/progress.ts"
+import { advanceChapter, markTestsPass, readProgress, setChapterMeta } from "./src/progress.ts"
 import { runProject } from "./src/project.ts"
-import type { UserProfile } from "./src/types.ts"
-import { findActiveProject, readJson, run, writeJson } from "./src/utils.ts"
+import {
+  implementPrompt,
+  planPrompt,
+  theoryPrompt as theoryStepPrompt,
+  writeTestsPrompt,
+} from "./src/steps.ts"
+import type { ChapterStep, UserProfile } from "./src/types.ts"
+import {
+  expandHome,
+  findActiveProject,
+  readChapterState,
+  readJson,
+  run,
+  writeChapterState,
+  writeJson,
+} from "./src/utils.ts"
+
+// ── Session state — set by runChapter, used by gate tools + event handlers ────────
+let _projectDir: string | null = null
+let _chapterNum = 0
+
+const setSessionState = (dir: string, n: number): void => {
+  _projectDir = dir
+  _chapterNum = n
+}
 
 const extension = (pi: ExtensionAPI): void => {
   // ── Tool: poiesis_save_profile ────────────────────────────────────────────
@@ -137,8 +169,19 @@ const extension = (pi: ExtensionAPI): void => {
         }
       }
 
-      const msgs: Record<Choice, string> = {
-        proceed: "Student confirmed the test plan. Now write the test file.",
+      if (result === "proceed") {
+        if (_projectDir) {
+          writeChapterState(_projectDir, _chapterNum, { step: "write-tests", testsPlan: tests })
+        }
+        return {
+          content: [
+            { type: "text" as const, text: `Test plan confirmed.\n\n${writeTestsPrompt(tests)}` },
+          ],
+          details: { action: "proceed", testCount: tests.length },
+        }
+      }
+
+      const msgs: Record<"add" | "skip", string> = {
         add:
           "Student wants to add a checkpoint. Ask them: \u2018What behaviour would you like to also verify?\u2019 " +
           "Then call poiesis_confirm_test_plan again with the new test appended.",
@@ -148,7 +191,7 @@ const extension = (pi: ExtensionAPI): void => {
       }
 
       return {
-        content: [{ type: "text" as const, text: msgs[result] }],
+        content: [{ type: "text" as const, text: msgs[result as "add" | "skip"] }],
         details: { action: result, testCount: tests.length },
       }
     },
@@ -244,17 +287,96 @@ const extension = (pi: ExtensionAPI): void => {
     },
   })
 
+  // ── Tool: poiesis_prereq_done ──────────────────────────────────────────────
+  pi.registerTool({
+    name: "poiesis_prereq_done",
+    label: "Poiesis: Prereq Gate Done",
+    description:
+      "Call after the prerequisite calibration step completes. " +
+      "Stores the result and fires the theory step prompt.",
+    parameters: Type.Object({
+      result: Type.Union([Type.Literal("familiar"), Type.Literal("primed")], {
+        description: '"familiar" = tech is in student stack; "primed" = needed primer first',
+      }),
+    }),
+    async execute(_id, { result }, _signal, _onUpdate, _ctx) {
+      if (!_projectDir)
+        return { content: [{ type: "text" as const, text: "No active chapter." }], details: {} }
+      writeChapterState(_projectDir, _chapterNum, { step: "theory", prereqResult: result })
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Prereq: ${result}.\n\n${theoryStepPrompt(result, _chapterNum)}`,
+          },
+        ],
+        details: { result },
+      }
+    },
+  })
+
+  // ── Tool: poiesis_theory_done ───────────────────────────────────────────────
+  pi.registerTool({
+    name: "poiesis_theory_done",
+    label: "Poiesis: Theory Done",
+    description:
+      "Call when the student has demonstrated understanding of the theory concepts. " +
+      "Fires the test-plan step.",
+    parameters: Type.Object({}),
+    async execute(_id, _params, _signal, _onUpdate, _ctx) {
+      if (!_projectDir)
+        return { content: [{ type: "text" as const, text: "No active chapter." }], details: {} }
+      writeChapterState(_projectDir, _chapterNum, { step: "plan" })
+      return {
+        content: [{ type: "text" as const, text: `Theory done.\n\n${planPrompt(_chapterNum)}` }],
+        details: {},
+      }
+    },
+  })
+
+  // ── Tool: poiesis_tests_written ─────────────────────────────────────────────
+  pi.registerTool({
+    name: "poiesis_tests_written",
+    label: "Poiesis: Tests Written",
+    description: "Call after writing the test file. Stores the path and fires the implement step.",
+    parameters: Type.Object({
+      testsFile: Type.String({
+        description: "Path to the test file, e.g. tests/chapter-3.test.ts",
+      }),
+      testNames: Type.Array(Type.String(), { description: "List of test names as written" }),
+    }),
+    async execute(_id, { testsFile, testNames }, _signal, _onUpdate, _ctx) {
+      if (!_projectDir)
+        return { content: [{ type: "text" as const, text: "No active chapter." }], details: {} }
+      writeChapterState(_projectDir, _chapterNum, { step: "implement", testsFile })
+      writeTddSection(_projectDir, _chapterNum, testsFile, testNames)
+      setChapterMeta(_projectDir, _chapterNum, "code", testsFile)
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Tests written at ${testsFile}.\n\n${implementPrompt(testsFile, _chapterNum)}`,
+          },
+        ],
+        details: { testsFile },
+      }
+    },
+  })
+
   // ── Bash pre-run review ─────────────────────────────────────────────
   // ponytail: safe-list = language-agnostic OS read-only commands only
   const SAFE_CMD =
     /^(cat |ls(?:$| )|grep |find |head |tail |wc |pwd$|echo [^>|]+$|diff |type |which |env$|printenv)/
+  // agent-browser is trusted — runs without review
+  const AGENT_TOOL = /^agent-browser /
 
   pi.on("tool_call", async (event, ctx) => {
+    if (!_projectDir) return // only active during a Poiesis chapter session
     if (event.toolName !== "bash") return
     const cmd = ((event.input as Record<string, unknown>).command as string | undefined) ?? ""
-    if (!cmd || SAFE_CMD.test(cmd.trimStart())) return // auto-proceed for safe commands
+    if (!cmd || SAFE_CMD.test(cmd.trimStart()) || AGENT_TOOL.test(cmd.trimStart())) return // auto-proceed for safe/trusted commands
 
-    type BashChoice = "run" | "skip" | "explain"
+    type BashChoice = "run" | "skip" | "explain" | "steer"
 
     const result = await ctx.ui.custom<BashChoice | null>((tui, theme, _kb, done) => {
       const root = new Container()
@@ -280,6 +402,11 @@ const extension = (pi: ExtensionAPI): void => {
 
       const items: SelectItem[] = [
         { value: "run", label: "✅ Run it", description: "Execute this command" },
+        {
+          value: "steer",
+          label: "🔀 Steer",
+          description: "Give the agent a correction (e.g. use pnpm, not npm)",
+        },
         {
           value: "skip",
           label: "❌ Skip — don't run this",
@@ -310,16 +437,75 @@ const extension = (pi: ExtensionAPI): void => {
     })
 
     if (result === "run") return // allow through
-    if (result === "explain")
+    if (result === "steer") {
+      const instruction = await ctx.ui.input("Steer the agent", "e.g. use pnpm instead of npm")
+      const msg = instruction?.trim()
+      return {
+        block: true,
+        reason: msg
+          ? `⚠️ USER CORRECTION: "${msg}"\n\nDo NOT run the blocked command. Follow the user's instruction instead: "${msg}". Adjust your approach and continue.`
+          : "User chose not to run this command.",
+      }
+    }
+    if (result === "explain") {
+      const preview = cmd.length > 200 ? `${cmd.slice(0, 200)}…` : cmd
       return {
         block: true,
         reason:
-          "The user wants to understand this command before it runs. " +
-          "In 2-3 sentences explain: what it does, why it's needed now, and whether it's reversible. " +
-          "After explaining, propose running it again.",
+          `⚠️ EXPLANATION REQUIRED — do not proceed until you have explained this.\n\nCommand blocked:\n\`${preview}\`\n\n` +
+          `1. Explain in 2–3 sentences: what it does, why it\'s needed now, and whether it\'s reversible.\n` +
+          `2. After explaining, propose running it again.\n` +
+          `Do NOT skip to another task.`,
       }
+    }
     // skip or null → block
     return { block: true, reason: "User chose not to run this command." }
+  })
+
+  // ── before_agent_start: inject chapter context into system prompt ──────────
+  pi.on("before_agent_start", async (event, _ctx) => {
+    if (!_projectDir) return
+    const profile = readJson<UserProfile>(PROFILE_PATH)
+    const chPath = join(
+      expandHome(_projectDir),
+      ".poiesis",
+      "chapters",
+      `chapter-${_chapterNum}.md`
+    )
+    const chapterMd = existsSync(chPath) ? readFileSync(chPath, "utf8") : ""
+    const context = buildChapterContext(_projectDir, chapterMd, profile, _chapterNum)
+    return { systemPrompt: `${event.systemPrompt}\n\n${context}` }
+  })
+
+  // ── session_before_compact: chapter-aware summary ──────────────────────────
+  const STEP_NEXT: Record<ChapterStep, string> = {
+    prereq: "call poiesis_prereq_done",
+    theory: "finish quiz \u2192 call poiesis_theory_done",
+    plan: "call poiesis_confirm_test_plan",
+    "write-tests": "write test file \u2192 call poiesis_tests_written",
+    implement: "make tests pass \u2192 call poiesis_run_tests",
+  }
+
+  pi.on("session_before_compact", async (event, _ctx) => {
+    if (!_projectDir) return
+    const state = readChapterState(_projectDir, _chapterNum)
+    if (!state) return
+    const planNames = state.testsPlan.map((t) => t.name).join(", ") || "(not confirmed yet)"
+    const summary = [
+      `## Poiesis \u2014 Chapter ${_chapterNum} (active session)`,
+      `Step: ${state.step}  |  Prereq: ${state.prereqResult ?? "n/a"}  |  Tests file: ${state.testsFile ?? "(not written yet)"}`,
+      `Tests passing: ${state.testsPass}`,
+      `Test plan: ${planNames}`,
+      `Next action: ${STEP_NEXT[state.step]}`,
+      "Chapter content is re-injected by before_agent_start on every turn.",
+    ].join("\n")
+    return {
+      compaction: {
+        summary,
+        firstKeptEntryId: event.preparation.firstKeptEntryId,
+        tokensBefore: event.preparation.tokensBefore,
+      },
+    }
   })
 
   // ── /poiesis ──────────────────────────────────────────────────────────────
@@ -335,7 +521,7 @@ const extension = (pi: ExtensionAPI): void => {
       const projectDir = findActiveProject(ctx.cwd)
       if (projectDir) {
         const profile = readJson<UserProfile>(PROFILE_PATH)
-        await runChapter(pi, ctx, profile, projectDir)
+        await runChapter(pi, ctx, profile, projectDir, setSessionState)
         return
       }
 

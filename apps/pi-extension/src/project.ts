@@ -75,7 +75,7 @@ Project name: "${name}"
 Return a JSON object matching the schema exactly. Be specific to the actual video content — no filler.
 
 Fields:
-- summary: 2–3 sentence overview of what the video covers and who it's for
+- summary: 2–3 sentence description of what this project builds and what problem it solves — written as a project README description, not a tutorial summary. Do not mention "this tutorial" or "this video".
 - techstack: a concise Markdown description of the project's tech stack (runtime, package manager, language, framework, key libraries, test runner, any important conventions). This will be injected into every chapter session so the AI tutor never needs to ask. Example: "**Runtime**: Bun\n**Package manager**: bun\n**Language**: TypeScript\n**Framework**: Hono\n**Testing**: Vitest (via bunx)\n\nAll commands use \'bun\'. Strict TypeScript throughout."
 - chapters: array of chapters, each with:
   - title: short chapter title (no number prefix)
@@ -214,7 +214,14 @@ dist/
 .env
 .env.local
 *.log
+.pi
+.poiesis
 `
+
+const POIESIS_LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" fill="none" height="16" width="16" style="vertical-align:middle"><rect x="4" y="4" width="40" height="40" rx="8" fill="#0f0f0f"/><rect width="40" height="40" rx="8" fill="oklch(0.55 0.19 9)"/><text x="20" y="30" text-anchor="middle" font-family="sans-serif" font-size="26" font-weight="800" fill="#fafafa">P</text></svg>`
+
+const buildReadme = (name: string, url: string, analysis: VideoAnalysis): string =>
+  `# ${name}\n\n${analysis.summary}\n\n---\n\n<sub>${POIESIS_LOGO} Built with <a href="https://shanvit7.github.io/poiesis/">Poiesis</a> · <a href="${url}">Source video</a></sub>\n`
 
 const scaffoldChapters = (
   chaptersDir: string,
@@ -237,6 +244,8 @@ const scaffoldChapters = (
       buildChapter(analysis.chapters[i], i + 1, analysis.chapters.length)
     )
   }
+
+  writeFileSync(join(projectDir, "README.md"), buildReadme(name, url, analysis), "utf8")
 
   // .gitignore at project root (not inside .poiesis)
   writeFileSync(join(projectDir, ".gitignore"), GITIGNORE, "utf8")
@@ -286,6 +295,7 @@ What was created:
 - ${analysis.chapters.length} chapter guide files in .poiesis/chapters/
 - techstack.md (tech context injected into every chapter session)
 - roadmap.json, chapter-index.md, summary.md
+- README.md
 - .gitignore
 - .poiesis/chapters/.progress.json (tracks chapter progress)
 

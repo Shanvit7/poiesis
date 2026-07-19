@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
+import type { ChapterState, ChapterStep } from "./types.ts"
 
 export const slugify = (s: string): string =>
   s
@@ -54,6 +55,34 @@ export const ensureDir = (path: string): void => {
   mkdirSync(expandHome(path), { recursive: true })
 }
 
+// ── Chapter step state ──────────────────────────────────────────────────────────────────
+
+export const chapterStatePath = (projectDir: string, n: number): string =>
+  join(expandHome(projectDir), ".poiesis", "chapters", `chapter-${n}.state.json`)
+
+export const readChapterState = (projectDir: string, n: number): ChapterState | null => {
+  const p = chapterStatePath(projectDir, n)
+  if (!existsSync(p)) return null
+  return readJson<ChapterState>(p)
+}
+
+/** Deep-merges patch into existing state, or creates from defaults. */
+export const writeChapterState = (
+  projectDir: string,
+  n: number,
+  patch: Partial<ChapterState>
+): void => {
+  const existing = readChapterState(projectDir, n) ?? {
+    step: "prereq" as ChapterStep,
+    prereqResult: null,
+    testsFile: null,
+    testsPlan: [],
+    testsPass: false,
+    startedAt: new Date().toISOString(),
+  }
+  writeJson(chapterStatePath(projectDir, n), { ...existing, ...patch })
+}
+
 /**
  * Find a poiesis project directory that has an active .progress.json.
  *
@@ -105,6 +134,27 @@ if (process.argv[1]?.endsWith("utils.ts")) {
       const empty = join(tmpdir(), `poiesis-empty-${Date.now()}`)
       mkdirSync(empty)
       console.assert(findActiveProject(empty) === null, "should return null for empty dir")
+
+      // chapterState round-trip
+      writeChapterState(join(tmp, "my-project"), 1, { step: "theory", prereqResult: "primed" })
+      const st = readChapterState(join(tmp, "my-project"), 1)
+      console.assert(st?.step === "theory", `state step not persisted: ${st?.step}`)
+      console.assert(
+        st?.prereqResult === "primed",
+        `state prereqResult not persisted: ${st?.prereqResult}`
+      )
+      console.assert(
+        st?.testsFile === null,
+        `state testsFile should default null: ${st?.testsFile}`
+      )
+      // patch merges, does not clobber existing fields
+      writeChapterState(join(tmp, "my-project"), 1, { step: "plan" })
+      const st2 = readChapterState(join(tmp, "my-project"), 1)
+      console.assert(st2?.step === "plan", `patched step failed: ${st2?.step}`)
+      console.assert(
+        st2?.prereqResult === "primed",
+        `prereqResult should survive patch: ${st2?.prereqResult}`
+      )
 
       rmSync(tmp, { recursive: true })
       rmSync(empty, { recursive: true })

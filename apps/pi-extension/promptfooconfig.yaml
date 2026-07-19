@@ -1,0 +1,232 @@
+# Poiesis — step prompt evaluation
+# Run:   npx promptfoo eval
+# View:  npx promptfoo view
+#
+# Provider reads ~/.pi/agent/settings.json + models.json at eval time.
+# Automatically uses whatever model pi is currently configured with — no API key setup needed.
+
+description: Poiesis step-prompt behavioural tests
+
+providers:
+  - id: file://providers/pi-model.mjs
+
+# Gate tools the model is allowed to call — mirrors index.ts registrations
+defaultTest:
+  options:
+    provider: file://providers/pi-model.mjs
+  # Shared tool definitions available to all tests
+  vars: {}
+
+# ── Tests ──────────────────────────────────────────────────────────────────────
+# Each test loads one prompt file. promptfoo substitutes {{vars}} before sending.
+
+tests:
+
+  # ── prereq ──────────────────────────────────────────────────────────────────
+
+  - description: "prereq — familiar tech → calls prereq_done(familiar)"
+    prompts:
+      - file://prompts/prereq.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_prereq_done
+              description: >
+                Call after prereq calibration step.
+                result=familiar = tech is in student stack;
+                result=primed = unfamiliar, primer questions were asked.
+              input_schema:
+                type: object
+                properties:
+                  result: { type: string, enum: [familiar, primed] }
+                required: [result]
+    vars:
+      profileContext: |
+        Stack: TypeScript, Node.js, React
+          - hono-api: REST API [TypeScript, Hono]
+          - next-blog: Blog site [TypeScript, Next.js]
+    assert:
+      - type: javascript
+        value: |
+          JSON.stringify(output).includes('poiesis_prereq_done') &&
+          JSON.stringify(output).includes('familiar')
+        threshold: 1
+
+  - description: "prereq — unfamiliar tech → asks questions or calls prereq_done(primed)"
+    prompts:
+      - file://prompts/prereq.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_prereq_done
+              description: >
+                Call after prereq calibration.
+              input_schema:
+                type: object
+                properties:
+                  result: { type: string, enum: [familiar, primed] }
+                required: [result]
+    vars:
+      profileContext: |
+        Stack: Python, Django
+          - django-api: REST API [Python, Django]
+    assert:
+      - type: llm-rubric
+        value: >
+          The response either asks 2–3 qualifying questions about the chapter tech,
+          or calls poiesis_prereq_done with result=primed. It does NOT call with
+          result=familiar for a Python developer when the chapter is about TypeScript/Node.
+        provider: file://providers/pi-model.mjs
+
+  # ── theory ──────────────────────────────────────────────────────────────────
+
+  - description: "theory(primed) — includes analogy, ends with quiz question"
+    prompts:
+      - file://prompts/theory.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_theory_done
+              description: Call when student has demonstrated understanding.
+              input_schema:
+                type: object
+                properties: {}
+    vars:
+      prereqResult: primed
+      chapterNum: "1"
+    assert:
+      - type: llm-rubric
+        value: >
+          The response explains a concept with an analogy (as required for "primed" students),
+          asks 1–2 quiz questions via ask_user_question, or calls poiesis_theory_done.
+          It does NOT skip straight to code.
+        provider: file://providers/pi-model.mjs
+
+  - description: "theory(familiar) — tradeoff-focused, no basic explanation"
+    prompts:
+      - file://prompts/theory.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_theory_done
+              description: Call when student has demonstrated understanding.
+              input_schema:
+                type: object
+                properties: {}
+    vars:
+      prereqResult: familiar
+      chapterNum: "2"
+    assert:
+      - type: llm-rubric
+        value: >
+          Response is appropriate for an experienced developer: focuses on tradeoffs
+          and edge cases rather than basic analogies. Should call poiesis_theory_done
+          once understanding is demonstrated.
+        provider: file://providers/pi-model.mjs
+
+  # ── plan ────────────────────────────────────────────────────────────────────
+
+  - description: "plan — calls poiesis_confirm_test_plan with 3–5 tests"
+    prompts:
+      - file://prompts/plan.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_confirm_test_plan
+              description: Propose 3–5 tests as learning checkpoints.
+              input_schema:
+                type: object
+                properties:
+                  chapterNum: { type: number }
+                  intro: { type: string }
+                  tests:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        why: { type: string }
+                      required: [name, why]
+                required: [chapterNum, intro, tests]
+    vars:
+      chapterNum: "3"
+    assert:
+      - type: javascript
+        value: |
+          const out = JSON.stringify(output);
+          out.includes('poiesis_confirm_test_plan') && out.includes('chapterNum')
+        threshold: 1
+      - type: llm-rubric
+        value: >
+          Response calls poiesis_confirm_test_plan directly without writing the test
+          list in chat first, and without calling ask_user_question.
+        provider: file://providers/pi-model.mjs
+
+  # ── write-tests ─────────────────────────────────────────────────────────────
+
+  - description: "write-tests — writes a test file and calls poiesis_tests_written"
+    prompts:
+      - file://prompts/write-tests.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_tests_written
+              description: Call after writing the test file.
+              input_schema:
+                type: object
+                properties:
+                  testsFile: { type: string }
+                  testNames: { type: array, items: { type: string } }
+                required: [testsFile, testNames]
+    vars:
+      testsPlan: |
+        1. server returns 200 on GET / — proves the server starts and responds
+        2. server returns 404 on unknown route — proves error routing works
+        3. health endpoint returns ok — proves structured response shape
+    assert:
+      - type: javascript
+        value: JSON.stringify(output).includes('poiesis_tests_written')
+        threshold: 1
+
+  # ── implement ───────────────────────────────────────────────────────────────
+
+  - description: "implement — runs tests and calls poiesis_run_tests when passing"
+    prompts:
+      - file://prompts/implement.md
+    options:
+      provider:
+        id: file://providers/pi-model.mjs
+        config:
+          tools:
+            - name: poiesis_run_tests
+              description: Run the chapter test suite. Returns pass/fail + output.
+              input_schema:
+                type: object
+                properties:
+                  chapter: { type: number }
+                  cmd: { type: string }
+                required: [chapter, cmd]
+    vars:
+      testsFile: tests/chapter-1.test.ts
+      chapterNum: "1"
+    assert:
+      - type: contains
+        value: poiesis_run_tests
+      - type: llm-rubric
+        value: >
+          Response follows the CRITICAL RULES: explains WHAT and WHY before code blocks,
+          runs commands via bash rather than asking the student to run them,
+          and ultimately calls poiesis_run_tests.
+        provider: file://providers/pi-model.mjs

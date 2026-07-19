@@ -1,0 +1,39 @@
+name: Eval prompts
+
+on:
+  pull_request:
+    paths:
+      - 'apps/pi-extension/prompts/**'
+      - 'apps/pi-extension/promptfooconfig.yaml'
+  workflow_dispatch: # manual trigger from GitHub UI
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/pi-extension
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install --frozen-lockfile
+
+      - name: Run promptfoo eval
+        run: bun run eval:ci
+        env:
+          # pi-model.mjs reads these when ~/.pi/agent/models.json is absent (CI)
+          PI_API_KEY: ${{ secrets.PI_API_KEY }}
+          PI_BASE_URL: ${{ secrets.PI_BASE_URL }}   # optional: defaults to api.anthropic.com
+          PI_MODEL: ${{ secrets.PI_MODEL }}         # optional: defaults to claude-haiku-4-5-20251001
+          PI_API: ${{ secrets.PI_API }}             # optional: anthropic-messages or openai-completions
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: promptfoo-results
+          path: apps/pi-extension/.promptfoo/
+          retention-days: 7
