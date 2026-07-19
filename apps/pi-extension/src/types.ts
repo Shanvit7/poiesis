@@ -1,8 +1,34 @@
+// ── Chapter / Progress types ──────────────────────────────────────────────
+
+export type ChapterKind = "code" | "theory"
+
+export interface ChapterMeta {
+  type: ChapterKind
+  testsFile: string | null // null = theory chapter
+  testsPass: boolean | null // null = theory; false = failing; true = passing
+}
+
+export interface Progress {
+  current: number
+  total: number
+  completed: number[]
+  startedAt: string
+  lastActiveAt: string
+  chapters: Record<string, ChapterMeta>
+}
+
+// ── User / Config types ─────────────────────────────────────────────────────
+
+export interface RecentProject {
+  name: string // repo or dir name
+  summary: string // one sentence: what was built, key tech used
+  stack: string[] // languages/frameworks in this project
+}
+
 export interface UserProfile {
-  primaryStack: string[] // languages/frameworks used most
-  experienceLevel: "beginner" | "intermediate" | "senior"
-  recentProjects: string[] // names of recent repos/dirs
-  recentActivity: string // one-line human summary
+  primaryStack: string[] // languages/frameworks used most across all projects
+  recentProjects: RecentProject[] // up to 8 projects with context
+  recentActivity: string // one-line human summary of recent work
   scannedAt: string // ISO timestamp — stale after 7 days
 }
 

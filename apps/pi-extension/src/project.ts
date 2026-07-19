@@ -1,6 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent"
+import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent"
+import { initProgress } from "./progress.ts"
+import type { ChapterMeta } from "./types.ts"
+
 /**
  * Post-onboarding project flow.
  *
@@ -23,6 +26,7 @@ interface Chapter {
 
 interface VideoAnalysis {
   summary: string
+  techstack: string
   chapters: Chapter[]
 }
 
@@ -72,6 +76,7 @@ Return a JSON object matching the schema exactly. Be specific to the actual vide
 
 Fields:
 - summary: 2–3 sentence overview of what the video covers and who it's for
+- techstack: a concise Markdown description of the project's tech stack (runtime, package manager, language, framework, key libraries, test runner, any important conventions). This will be injected into every chapter session so the AI tutor never needs to ask. Example: "**Runtime**: Bun\n**Package manager**: bun\n**Language**: TypeScript\n**Framework**: Hono\n**Testing**: Vitest (via bunx)\n\nAll commands use \'bun\'. Strict TypeScript throughout."
 - chapters: array of chapters, each with:
   - title: short chapter title (no number prefix)
   - concepts: array of 2–5 key topics covered
@@ -88,6 +93,7 @@ Fields:
         type: GType.OBJECT,
         properties: {
           summary: { type: GType.STRING },
+          techstack: { type: GType.STRING },
           chapters: {
             type: GType.ARRAY,
             items: {
@@ -103,7 +109,7 @@ Fields:
             },
           },
         },
-        required: ["summary", "chapters"],
+        required: ["summary", "techstack", "chapters"],
       },
     },
   })
@@ -112,6 +118,24 @@ Fields:
 }
 
 // ── File builders ─────────────────────────────────────────────────────────────
+
+const buildTechstack = (techstack: string): string => techstack.trim()
+
+const buildRoadmapJson = (name: string, analysis: VideoAnalysis): string =>
+  JSON.stringify(
+    {
+      name,
+      chapters: analysis.chapters.map((ch, i) => ({
+        n: i + 1,
+        title: ch.title,
+        duration: ch.duration,
+        done: false,
+        kind: null,
+      })),
+    },
+    null,
+    2
+  )
 
 const buildSummary = (
   name: string,
@@ -185,17 +209,27 @@ ${prev} · ${next}
 
 // ── Scaffold ──────────────────────────────────────────────────────────────────
 
+const GITIGNORE = `node_modules/
+dist/
+.env
+.env.local
+*.log
+`
+
 const scaffoldChapters = (
-  dir: string,
+  chaptersDir: string,
+  projectDir: string,
   name: string,
   url: string,
   analysis: VideoAnalysis
 ): void => {
   const write = (filename: string, content: string): void =>
-    writeFileSync(join(dir, filename), content, "utf8")
+    writeFileSync(join(chaptersDir, filename), content, "utf8")
 
   write("summary.md", buildSummary(name, url, analysis))
   write("chapter-index.md", buildIndex(name, url, analysis))
+  write("techstack.md", buildTechstack(analysis.techstack))
+  write("roadmap.json", buildRoadmapJson(name, analysis))
 
   for (let i = 0; i < analysis.chapters.length; i++) {
     write(
@@ -203,11 +237,21 @@ const scaffoldChapters = (
       buildChapter(analysis.chapters[i], i + 1, analysis.chapters.length)
     )
   }
+
+  // .gitignore at project root (not inside .poiesis)
+  writeFileSync(join(projectDir, ".gitignore"), GITIGNORE, "utf8")
+
+  // initialise progress — classifyChapter refines type at runtime
+  const chapters: Record<string, ChapterMeta> = {}
+  for (let i = 0; i < analysis.chapters.length; i++) {
+    chapters[i + 1] = { type: "code", testsFile: null, testsPass: false }
+  }
+  initProgress(projectDir, analysis.chapters.length, chapters)
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
 
-export const runProject = async (ctx: ExtensionCommandContext): Promise<void> => {
+export const runProject = async (pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<void> => {
   // 1. YT URL
   const url = (await ctx.ui.input("Paste a YouTube URL")) ?? ""
   if (!YT_RE.test(url)) {
@@ -222,19 +266,35 @@ export const runProject = async (ctx: ExtensionCommandContext): Promise<void> =>
     defaultTitle
   const name = toFolder(input) || "project"
 
-  // 3. Scaffold directory
-  const chaptersDir = join(ctx.cwd, name, "chapters")
-  mkdirSync(chaptersDir, { recursive: true })
+  // 3. Scaffold directory (.poiesis/chapters lives inside the project)
+  const projectDir = join(ctx.cwd, name)
+  const poiesisChaptersDir = join(projectDir, ".poiesis", "chapters")
+  mkdirSync(poiesisChaptersDir, { recursive: true })
 
   // 4. Analyze + write files
   ctx.ui.setStatus("poiesis", " Analyzing video with Gemini…")
   try {
     const analysis = await analyzeVideo(url, name)
-    scaffoldChapters(chaptersDir, name, url, analysis)
+    scaffoldChapters(poiesisChaptersDir, projectDir, name, url, analysis)
     ctx.ui.setStatus("poiesis", undefined)
-    ctx.ui.notify(
-      `✓ ${name}/chapters/ ready — ${analysis.chapters.length} chapters + index + summary`,
-      "info"
+
+    // 5. Handoff — trigger the LLM to brief the user on what was created
+    await pi.sendUserMessage(
+      `The poiesis project "${name}" has been scaffolded at: ${projectDir}
+
+What was created:
+- ${analysis.chapters.length} chapter guide files in .poiesis/chapters/
+- techstack.md (tech context injected into every chapter session)
+- roadmap.json, chapter-index.md, summary.md
+- .gitignore
+- .poiesis/chapters/.progress.json (tracks chapter progress)
+
+Tell the user all of the following:
+1. The project is ready at \`${projectDir}\`
+2. How to start: \`cd ${projectDir}\` then run \`/poiesis\`
+3. One-line teaser of chapter 1: "${analysis.chapters[0]?.title ?? "Chapter 1"}"
+
+Be concise — 3–4 sentences max.`
     )
   } catch (err) {
     ctx.ui.setStatus("poiesis", undefined)
