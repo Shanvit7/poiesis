@@ -27,13 +27,15 @@ export const runOnboarding = async (
 
   if (pick === "Sure!") {
     await pi.sendUserMessage(
-      `Run \`gh repo list --limit 50 --json name,primaryLanguage,updatedAt\` and list directory names (not contents) in ~/Desktop, ~/projects, ~/dev, ~/code.
+      `Run \`gh repo list --limit 50 --json name,primaryLanguage,description,updatedAt\` and list directory names (not contents) in ~/Desktop, ~/projects, ~/dev, ~/code.
 
 From what you find, call \`poiesis_save_profile\` with:
-- primaryStack: top languages you see
-- experienceLevel: "beginner" | "intermediate" | "senior"
-- recentProjects: up to 8 repo/dir names
-- recentActivity: one-line summary
+- primaryStack: top languages/frameworks across all repos
+- recentProjects: up to 8 projects, each with:
+    name: repo or dir name
+    summary: one sentence — what was built and what tech was used (use description field or infer from name/language)
+    stack: languages/frameworks in that project
+- recentActivity: one-line summary of what they’ve been building lately
 
 Call the tool immediately once you have enough data. No summary, no greeting. After calling the tool, tell the user to run /poiesis.`
     )
@@ -43,10 +45,12 @@ Call the tool immediately once you have enough data. No summary, no greeting. Af
   // Multi-turn QnA path — same tail: LLM calls poiesis_save_profile → followUp → runProject
   await pi.sendUserMessage(
     `Ask the user about themselves — one question at a time, casual tone. Find out:
-- primaryStack (languages/frameworks they build with)
-- experienceLevel ("beginner" | "intermediate" | "senior")
-- recentProjects (a few project names if they mention any)
-- recentActivity (one-line summary of what they've been building)
+- primaryStack: languages/frameworks they build with most
+- recentProjects: up to 5 things they've built recently, for each:
+    name: project or repo name
+    summary: one sentence — what they built and what tech they used
+    stack: the main languages/frameworks in that project
+- recentActivity: one-line summary of what they've been working on
 
 Once you have enough, call \`poiesis_save_profile\`. No sign-off after saving.`
   )

@@ -1,6 +1,6 @@
-import { execSync } from "child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs"
-import { dirname, resolve } from "path"
+import { execSync } from "node:child_process"
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { dirname, join } from "node:path"
 
 export const slugify = (s: string): string =>
   s
@@ -54,9 +54,61 @@ export const ensureDir = (path: string): void => {
   mkdirSync(expandHome(path), { recursive: true })
 }
 
+/**
+ * Find a poiesis project directory that has an active .progress.json.
+ *
+ * Two-pass:
+ * 1. cwd itself is the project root (user is already inside it)
+ * 2. scan immediate children of cwd (user is in the parent)
+ */
+export const findActiveProject = (cwd: string): string | null => {
+  const base = expandHome(cwd)
+
+  // Pass 1: cwd is the project itself
+  if (existsSync(join(base, ".poiesis", "chapters", ".progress.json"))) return base
+
+  // Pass 2: scan one level down
+  let entries: import("node:fs").Dirent[]
+  try {
+    entries = readdirSync(base, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue
+    if (existsSync(join(base, e.name, ".poiesis", "chapters", ".progress.json")))
+      return join(base, e.name)
+  }
+  return null
+}
+
 // ponytail: self-check
 if (process.argv[1]?.endsWith("utils.ts")) {
-  const s = slugify("Build a Rust HTTP Server from Scratch!!")
-  console.assert(s === "build-a-rust-http-server-from-scratch", `slugify failed: ${s}`)
-  console.log("utils.ts: ok")
+  import("node:os").then(({ tmpdir }) => {
+    import("node:fs").then(({ mkdirSync, writeFileSync, rmSync }) => {
+      const s = slugify("Build a Rust HTTP Server from Scratch!!")
+      console.assert(s === "build-a-rust-http-server-from-scratch", `slugify failed: ${s}`)
+
+      // Pass 2: cwd is the parent, project is a child dir
+      const tmp = join(tmpdir(), `poiesis-utils-${Date.now()}`)
+      const projDir = join(tmp, "my-project", ".poiesis", "chapters")
+      mkdirSync(projDir, { recursive: true })
+      writeFileSync(join(projDir, ".progress.json"), "{}")
+      const found = findActiveProject(tmp)
+      console.assert(found === join(tmp, "my-project"), `pass-2 failed: ${found}`)
+
+      // Pass 1: cwd IS the project (user ran /poiesis from inside it)
+      const insideFound = findActiveProject(join(tmp, "my-project"))
+      console.assert(insideFound === join(tmp, "my-project"), `pass-1 failed: ${insideFound}`)
+
+      // null when nothing found
+      const empty = join(tmpdir(), `poiesis-empty-${Date.now()}`)
+      mkdirSync(empty)
+      console.assert(findActiveProject(empty) === null, "should return null for empty dir")
+
+      rmSync(tmp, { recursive: true })
+      rmSync(empty, { recursive: true })
+      console.log("utils.ts: ok")
+    })
+  })
 }
