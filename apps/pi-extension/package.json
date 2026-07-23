@@ -1,6 +1,6 @@
 {
   "name": "@shanvit7/poiesis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pi extension — YouTube tutorial tutor. Ingest any coding video, grill the user, scaffold the project, and generate chapter-by-chapter lab guides.",
   "keywords": [
     "pi-package",
@@ -20,14 +20,28 @@
     "eval:view": "promptfoo view",
     "eval:ci": "promptfoo eval --ci --no-cache"
   },
-  "files": ["index.ts", "src", "prompts", "skills", "README.md", "LICENSE"],
+  "files": [
+    "index.ts",
+    "src",
+    "prompts",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
   "publishConfig": {
     "access": "public"
   },
   "pi": {
-    "extensions": ["./index.ts", "node_modules/@juicesharp/rpiv-ask-user-question/index.ts"],
-    "skills": ["./skills"],
-    "prompts": ["./prompts"]
+    "extensions": [
+      "./index.ts",
+      "node_modules/@juicesharp/rpiv-ask-user-question/index.ts"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
+    ]
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
